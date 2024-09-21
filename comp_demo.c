@@ -1,5 +1,8 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include "w97.c"
+#include <math.h>
+#include "w97.h"
 
 void subtract_predict(int blk, double* reco, double* x, int width, int height, int stride)
 {
@@ -154,7 +157,6 @@ int main(int argc, char **argv)
   double* resi = (double*)malloc(width * height * sizeof(double));
   double* trafo = (double*)malloc(width * height * sizeof(double));
   double* reco = (double*)malloc(width * height * sizeof(double));
-  int i,j;
 
   //load data and copy to orig.bin
   dbls_from_file(argv[1], x, width * height);

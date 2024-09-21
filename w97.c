@@ -1,6 +1,6 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include "w97.h"
 
 double* tempbank = 0;
 
