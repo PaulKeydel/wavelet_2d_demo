@@ -10,7 +10,7 @@ void predict(int blk, double* reco, double* dst, int width, int height, int stri
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      int pred = 0;
+      double pred = 0;
       if (blk == 0)
       {
         pred = 32;
