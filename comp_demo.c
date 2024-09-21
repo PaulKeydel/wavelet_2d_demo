@@ -4,7 +4,7 @@
 #include <math.h>
 #include "w97.h"
 
-void subtract_predict(int blk, double* reco, double* x, int width, int height, int stride)
+void predict(int blk, double* reco, double* dst, int width, int height, int stride)
 {
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
@@ -27,35 +27,15 @@ void subtract_predict(int blk, double* reco, double* x, int width, int height, i
       {
         pred = 0.5 * (reco[colidx - stride] + reco[rowidx * stride - 1]);
       }
-      x[rowidx * stride + colidx] -= pred;
-    }
-  }
-}
-
-void add_predict(int blk, double* reco, int width, int height, int stride)
-{
-  for (int rowidx = 0; rowidx < height; rowidx++)
-  {
-    for (int colidx = 0; colidx < width; colidx++)
-    {
-      int pred = 0;
-      if (blk == 0)
+      //subtract or add prediction value
+      if (dst != NULL)
       {
-        pred = 32;
+        dst[rowidx * stride + colidx] -= pred;
       }
-      else if (blk == 1)
+      else
       {
-        pred = reco[rowidx * stride - 1];
+        reco[rowidx * stride + colidx] += pred;
       }
-      else if (blk == 2)
-      {
-        pred = reco[colidx - stride];
-      }
-      else if (blk == 3)
-      {
-        pred = 0.5 * (reco[colidx - stride] + reco[rowidx * stride - 1]);
-      }
-      reco[rowidx * stride + colidx] += pred;
     }
   }
 }
@@ -181,18 +161,23 @@ int main(int argc, char **argv)
   //quad split and for each block do first compression and then decompression
   for (int blk = 0; blk < 4; blk++)
   {
+    //block partitioning
     int offset = ((blk % 2) * (width / 2)) + ((blk / 2) * (height * width / 2));
+    double* currOrig = x + offset;
+    double* currResi = resi + offset;
+    double* currTrafo = trafo + offset;
+    double* currReco = reco + offset;
     //compression: prediction, 9/7 transformtion and quatization
-    blkcpy(x + offset, resi + offset, width/2, height/2, width);
-    subtract_predict(blk, reco + offset, resi + offset, width/2, height/2, width);
-    blkcpy(resi + offset, trafo + offset, width/2, height/2, width);
-    lwt97_2d(trafo + offset, width/2, height/2, width);
-    quantize(trafo + offset, width/2, height/2, width, stepsize0);
-    blkcpy(trafo + offset, reco + offset, width/2, height/2, width);
+    blkcpy(currOrig, currResi, width/2, height/2, width);
+    predict(blk, currReco, currResi, width/2, height/2, width);
+    blkcpy(currResi, currTrafo, width/2, height/2, width);
+    lwt97_2d(currTrafo, width/2, height/2, width);
+    quantize(currTrafo, width/2, height/2, width, stepsize0);
+    blkcpy(currTrafo, currReco, width/2, height/2, width);
     //decompression
-    dequantize(reco + offset, width/2, height/2, width, stepsize0);
-    invconvWT_2d(h_syn, 7, g_syn, 9, reco + offset, width/2, height/2, width);
-    add_predict(blk, reco + offset, width/2, height/2, width);
+    dequantize(currReco, width/2, height/2, width, stepsize0);
+    invconvWT_2d(h_syn, 7, g_syn, 9, currReco, width/2, height/2, width);
+    predict(blk, currReco, NULL, width/2, height/2, width);
   }
   //safe everything to files
   dbls_to_file("resi.bin", resi, width * height);
