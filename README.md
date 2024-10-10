@@ -10,7 +10,7 @@ First, the original image is splitted into blocks (in our case a single quad spl
 3. Transform the residuum using the CDF9/7 trafo.
 4. Quantize the resulting coefficients with a fixed stepsize. A lot of zeros will appear (hopefully).
 
-![Compression demo](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/Figure_1.svg)
+![Compression demo](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/Figure_2.svg)
 
 **How to use this project?**
 

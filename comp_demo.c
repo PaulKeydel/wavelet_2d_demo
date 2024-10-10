@@ -4,26 +4,26 @@
 #include <math.h>
 #include "w97.h"
 
-void predict(int blk, double* reco, double* dst, int width, int height, int stride)
+void predict(int subblk, double* reco, double* dst, int width, int height, int stride)
 {
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
       double pred = 0;
-      if (blk == 0)
+      if (subblk == 0)
       {
         pred = 32;
       }
-      else if (blk == 1)
+      else if (subblk == 1)
       {
         pred = reco[rowidx * stride - 1];
       }
-      else if (blk == 2)
+      else if (subblk == 2)
       {
         pred = reco[colidx - stride];
       }
-      else if (blk == 3)
+      else if (subblk == 3)
       {
         pred = 0.5 * (reco[colidx - stride] + reco[rowidx * stride - 1]);
       }
@@ -161,23 +161,34 @@ int main(int argc, char **argv)
   //quad split and for each block do first compression and then decompression
   for (int blk = 0; blk < 4; blk++)
   {
-    //block partitioning
+    //depth-1 partitioning
     int offset = ((blk % 2) * (width / 2)) + ((blk / 2) * (height * width / 2));
-    double* currOrig = x + offset;
-    double* currResi = resi + offset;
-    double* currTrafo = trafo + offset;
-    double* currReco = reco + offset;
-    //compression: prediction, 9/7 transformtion and quatization
-    blkcpy(currOrig, currResi, width/2, height/2, width);
-    predict(blk, currReco, currResi, width/2, height/2, width);
-    blkcpy(currResi, currTrafo, width/2, height/2, width);
-    lwt97_2d(currTrafo, width/2, height/2, width);
-    quantize(currTrafo, width/2, height/2, width, stepsize0);
-    blkcpy(currTrafo, currReco, width/2, height/2, width);
-    //decompression
-    dequantize(currReco, width/2, height/2, width, stepsize0);
-    invconvWT_2d(h_syn, 7, g_syn, 9, currReco, width/2, height/2, width);
-    predict(blk, currReco, NULL, width/2, height/2, width);
+    for (int subblk = 0; subblk < (blk == 0 ? 4 : 1); subblk++)
+    {
+      int suboffset = offset;
+      int blkratio = 2;
+      if (blk == 0)
+      {
+        //depth-2 partitioning
+        suboffset = ((subblk % 2) * (width / 4)) + ((subblk / 2) * (height * width / 4));
+        blkratio = 4;
+      }
+      double* currOrig = x + suboffset;
+      double* currResi = resi + suboffset;
+      double* currTrafo = trafo + suboffset;
+      double* currReco = reco + suboffset;
+      //compression: prediction, 9/7 transformtion and quatization
+      blkcpy(currOrig, currResi, width/blkratio, height/blkratio, width);
+      predict(subblk, currReco, currResi, width/blkratio, height/blkratio, width);
+      blkcpy(currResi, currTrafo, width/blkratio, height/blkratio, width);
+      lwt97_2d(currTrafo, width/blkratio, height/blkratio, width);
+      quantize(currTrafo, width/blkratio, height/blkratio, width, stepsize0);
+      blkcpy(currTrafo, currReco, width/blkratio, height/blkratio, width);
+      //decompression
+      dequantize(currReco, width/blkratio, height/blkratio, width, stepsize0);
+      invconvWT_2d(h_syn, 7, g_syn, 9, currReco, width/blkratio, height/blkratio, width);
+      predict(subblk, currReco, NULL, width/blkratio, height/blkratio, width);
+    }
   }
   //safe everything to files
   dbls_to_file("resi.bin", resi, width * height);
