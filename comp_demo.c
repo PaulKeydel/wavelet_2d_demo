@@ -163,7 +163,7 @@ int main(int argc, char **argv)
   {
     //depth-1 partitioning
     int offset = ((blk % 2) * (width / 2)) + ((blk / 2) * (height * width / 2));
-    for (int subblk = 0; subblk < (blk == 0 ? 4 : 1); subblk++)
+    for (int subblk = blk; subblk < (blk == 0 ? 4 : (blk + 1)); subblk++)
     {
       int suboffset = offset;
       int blkratio = 2;
