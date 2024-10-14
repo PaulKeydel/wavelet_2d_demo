@@ -21,7 +21,7 @@ def entropy(message):
         ent -= i * math.log(i, 2)
     return ent
 
-assert(len(sys.argv) == 3)
+assert(len(sys.argv) == 3 or len(sys.argv) == 4)
 width = int(sys.argv[1])
 height = int(sys.argv[2])
 num_pixel = width * height
@@ -46,22 +46,26 @@ resi_data = struct.unpack('i'*num_pixel, resi_bytes)
 resi_data = np.reshape(resi_data, (width,height))
 resi_data = abs(resi_data)
 
-fig, axs = plt.subplots(2, 2)
-axs[0, 0].matshow(orig_data)
-axs[0, 0].set_title('orig')
+fig, axs = plt.subplots(2, 2, figsize=(10, 8))
 
-axs[1, 0].matshow(reco_data)
-axs[1, 0].set_title('reco')
+axs[0, 0].matshow(orig_data, cmap=cm.gray)
+axs[0, 0].set_title('Original')
+
+axs[1, 0].matshow(reco_data, cmap=cm.gray)
+axs[1, 0].set_title('Reconstructed')
 
 presi = axs[0, 1].matshow(resi_data, cmap=cm.gray_r, norm=SymLogNorm(linthresh=4, base=2))
 fig.colorbar(presi, ax=axs[0, 1])
-axs[0, 1].set_title('abs(resi)')
+axs[0, 1].set_title('Residual (absolute values)')
 
 pcoeff = axs[1, 1].matshow(coeff_data, cmap=cm.gray_r, norm=SymLogNorm(linthresh=2, base=2))
 fig.colorbar(pcoeff, ax=axs[1, 1])
-axs[1, 1].set_title('abs(quant coeff)')
+axs[1, 1].set_title('Transformed (abs. values)')
 
 txt = "Entropy original image: " + "{:.3f}".format(entr_orig) + "   /   entropy transformed image: " + "{:.3f}".format(entr_coeff)
 plt.figtext(0.5, 0.01, txt, wrap=True, horizontalalignment='center', fontsize=12)
 
-plt.show()
+if (len(sys.argv) == 3):
+    plt.show()
+else:
+    plt.savefig(sys.argv[3], format="svg", bbox_inches="tight")

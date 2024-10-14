@@ -4,7 +4,7 @@
 #include <math.h>
 #include "w97.h"
 
-void predict(int subblk, double* reco, double* dst, int width, int height, int stride)
+void predict(int subblk, double* reco, double* dst, int width, int height, int stride, int defaultPred)
 {
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
@@ -13,7 +13,7 @@ void predict(int subblk, double* reco, double* dst, int width, int height, int s
       double pred = 0;
       if (subblk == 0)
       {
-        pred = 32;
+        pred = defaultPred;
       }
       else if (subblk == 1)
       {
@@ -40,20 +40,17 @@ void predict(int subblk, double* reco, double* dst, int width, int height, int s
   }
 }
 
-int estQuantStepSize(double* x, int width, int height, int stride)
+int estBitdepth(double* x, int width, int height, int stride)
 {
-  double min = x[0];
-  double max = x[0];
+  double max = fabs(x[0]);
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      if (x[rowidx * stride + colidx] > max) max = x[rowidx * stride + colidx];
-      if (x[rowidx * stride + colidx] < min) min = x[rowidx * stride + colidx];
+      if (fabs(x[rowidx * stride + colidx]) > max) max = fabs(x[rowidx * stride + colidx]);
     }
   }
-  int bitdepth = (int)ceil(log2(max - min));
-  return (int)pow(2, bitdepth / 2 + 1);
+  return (int)ceil(log2(max));
 }
 
 void quantize(double* x, int width, int height, int stride, int stepsize)
@@ -123,16 +120,17 @@ void blkcpy(double* src, double* dst, int width, int height, int stride)
 
 int main(int argc, char **argv)
 {
-  if (argc != 4)
+  if (argc != 5)
   {
     printf("Not enough parameter!\n");
-    printf("Usage: w97 <image_file> <width> <height>\n");
+    printf("Usage: comp_demo <image_file> <width> <height> <quant step-size>\n");
     return -1;
   }
 
   //declarations
   int width = atoi(argv[2]);
   int height = atoi(argv[3]);
+  int stepsize0 = atoi(argv[4]);
   double* x = (double*)malloc(width * height * sizeof(double));
   double* resi = (double*)malloc(width * height * sizeof(double));
   double* trafo = (double*)malloc(width * height * sizeof(double));
@@ -154,9 +152,9 @@ int main(int argc, char **argv)
   //h_ana: 0.026748, -0.016864, -0.078223,  0.266864, 0.602949,  0.266864, -0.078223, -0.016864, 0.026748
   //g_syn: 0.053496,  0.033728, -0.156446, -0.533728, 1.205898, -0.533728, -0.156446,  0.033728, 0.053496
 
-  //estimate step size for quantization depending on input bitdepth
-  int stepsize0 = estQuantStepSize(x, width, height, width);
-  printf("Quantization step size: %d\n", stepsize0);
+  //estimate bit-depth
+  int bitdepth = estBitdepth(x, width, height, width);
+  printf("Bit depth input image: %d\n", bitdepth);
 
   //quad split and for each block do first compression and then decompression
   for (int blk = 0; blk < 4; blk++)
@@ -179,7 +177,7 @@ int main(int argc, char **argv)
       double* currReco = reco + suboffset;
       //compression: prediction, 9/7 transformtion and quatization
       blkcpy(currOrig, currResi, width/blkratio, height/blkratio, width);
-      predict(subblk, currReco, currResi, width/blkratio, height/blkratio, width);
+      predict(subblk, currReco, currResi, width/blkratio, height/blkratio, width, 1 << (bitdepth - 1));
       blkcpy(currResi, currTrafo, width/blkratio, height/blkratio, width);
       lwt97_2d(currTrafo, width/blkratio, height/blkratio, width);
       quantize(currTrafo, width/blkratio, height/blkratio, width, stepsize0);
@@ -187,7 +185,7 @@ int main(int argc, char **argv)
       //decompression
       dequantize(currReco, width/blkratio, height/blkratio, width, stepsize0);
       invconvWT_2d(h_syn, 7, g_syn, 9, currReco, width/blkratio, height/blkratio, width);
-      predict(subblk, currReco, NULL, width/blkratio, height/blkratio, width);
+      predict(subblk, currReco, NULL, width/blkratio, height/blkratio, width, 1 << (bitdepth - 1));
     }
   }
   //safe everything to files
