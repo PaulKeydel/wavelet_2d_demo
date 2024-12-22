@@ -4,8 +4,17 @@
 #include <math.h>
 #include "w97.h"
 
-void predict(int subblk, double* reco, double* dst, int width, int height, int stride, int defaultPred)
+double clipLR(double val, double min, double max)
 {
+  if (val < min) return min;
+  if (val > max) return max;
+  return val;
+}
+
+void predict(int subblk, double* reco, double* dst, int width, int height, int stride, int bitdepth)
+{
+  int defaultPred = 1 << (bitdepth - 1);
+  int maxPixel = (1 << bitdepth) - 1;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
@@ -30,11 +39,11 @@ void predict(int subblk, double* reco, double* dst, int width, int height, int s
       //subtract or add prediction value
       if (dst != NULL)
       {
-        dst[rowidx * stride + colidx] -= pred;
+        dst[rowidx * stride + colidx] = clipLR(dst[rowidx * stride + colidx] - pred + maxPixel, 0, (1 << (bitdepth + 1)) - 1);
       }
       else
       {
-        reco[rowidx * stride + colidx] += pred;
+        reco[rowidx * stride + colidx] = clipLR(reco[rowidx * stride + colidx] + pred - maxPixel, 0, (1 << bitdepth) - 1);
       }
     }
   }
@@ -53,7 +62,7 @@ int estBitdepth(double* x, int width, int height, int stride)
   return (int)ceil(log2(max));
 }
 
-void quantize(double* x, int width, int height, int stride, int stepsize)
+void quantize(double* x, int width, int height, int stride, int bitdepth, int stepsize)
 {
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
@@ -61,6 +70,7 @@ void quantize(double* x, int width, int height, int stride, int stepsize)
     {
       int sgn = x[rowidx * stride + colidx] < 0 ? -1 : 1;
       x[rowidx * stride + colidx] = sgn * floor(fabs(x[rowidx * stride + colidx]) / stepsize);
+      x[rowidx * stride + colidx] = clipLR(x[rowidx * stride + colidx], 0, (1 << (bitdepth + 2))/stepsize - 1);
     }
   }
 }
@@ -177,15 +187,15 @@ int main(int argc, char **argv)
       double* currReco = reco + suboffset;
       //compression: prediction, 9/7 transformtion and quatization
       blkcpy(currOrig, currResi, width/blkratio, height/blkratio, width);
-      predict(subblk, currReco, currResi, width/blkratio, height/blkratio, width, 1 << (bitdepth - 1));
+      predict(subblk, currReco, currResi, width/blkratio, height/blkratio, width, bitdepth);
       blkcpy(currResi, currTrafo, width/blkratio, height/blkratio, width);
       lwt97_2d(currTrafo, width/blkratio, height/blkratio, width);
-      quantize(currTrafo, width/blkratio, height/blkratio, width, stepsize0);
+      quantize(currTrafo, width/blkratio, height/blkratio, width, bitdepth, stepsize0);
       blkcpy(currTrafo, currReco, width/blkratio, height/blkratio, width);
       //decompression
       dequantize(currReco, width/blkratio, height/blkratio, width, stepsize0);
       invconvWT_2d(h_syn, 7, g_syn, 9, currReco, width/blkratio, height/blkratio, width);
-      predict(subblk, currReco, NULL, width/blkratio, height/blkratio, width, 1 << (bitdepth - 1));
+      predict(subblk, currReco, NULL, width/blkratio, height/blkratio, width, bitdepth);
     }
   }
   //safe everything to files
