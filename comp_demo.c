@@ -65,7 +65,7 @@ void transform(double* x, int width, int height, int stride, int shift)
   double h_ana[9] = {  0.037827, -0.023849, -0.110624, 0.377403,  0.852699, 0.377403, -0.110624, -0.023849,  0.037827 };
   double g_syn[9] = { -0.037827, -0.023849,  0.110624, 0.377403, -0.852699, 0.377403,  0.110624, -0.023849, -0.037827 };
 #else
-  Taubmann:
+  //Taubmann:
   double h_syn[7] = { -0.091270, -0.057542,  0.591270, 1.115086,  0.591270, -0.057542, -0.091270 };
   double g_ana[7] = { 0.045635, -0.028771, -0.295635, 0.557543, -0.295635, -0.028771,  0.045635 };
   double h_ana[9] = { 0.026748, -0.016864, -0.078223,  0.266864, 0.602949,  0.266864, -0.078223, -0.016864, 0.026748 };
@@ -78,7 +78,11 @@ void transform(double* x, int width, int height, int stride, int shift)
       x[i * stride + j] += (double)((1 << shift) - 1);
     }
   }
+#if USE_TAUBMANN
+  convWT_2d(h_ana, 9, g_ana, 7, x, width, height, stride);
+#else
   lwt97_2d(x, width, height, stride);
+#endif
 }
 
 void inv_transform(double* x, int width, int height, int stride, int shift)
@@ -90,13 +94,17 @@ void inv_transform(double* x, int width, int height, int stride, int shift)
   double h_ana[9] = {  0.037827, -0.023849, -0.110624, 0.377403,  0.852699, 0.377403, -0.110624, -0.023849,  0.037827 };
   double g_syn[9] = { -0.037827, -0.023849,  0.110624, 0.377403, -0.852699, 0.377403,  0.110624, -0.023849, -0.037827 };
 #else
-  Taubmann:
+  //Taubmann:
   double h_syn[7] = { -0.091270, -0.057542,  0.591270, 1.115086,  0.591270, -0.057542, -0.091270 };
   double g_ana[7] = { 0.045635, -0.028771, -0.295635, 0.557543, -0.295635, -0.028771,  0.045635 };
   double h_ana[9] = { 0.026748, -0.016864, -0.078223,  0.266864, 0.602949,  0.266864, -0.078223, -0.016864, 0.026748 };
   double g_syn[9] = { 0.053496,  0.033728, -0.156446, -0.533728, 1.205898, -0.533728, -0.156446,  0.033728, 0.053496 };
 #endif
+#if USE_TAUBMANN
   invconvWT_2d(h_syn, 7, g_syn, 9, x, width, height, stride);
+#else
+  ilwt97_2d(x, width, height, stride);
+#endif
   for (int i = 0; i < height; i++)
   {
     for (int j = 0; j < width; j++)
@@ -127,7 +135,11 @@ void quantize(double* x, int width, int height, int stride, int bitdepth, int Qp
     {
       int sgn = x[rowidx * stride + colidx] < 0 ? -1 : 1;
       x[rowidx * stride + colidx] = sgn * floor(fabs(x[rowidx * stride + colidx]) / (1 << Qp));
+#if USE_TAUBMANN
+      x[rowidx * stride + colidx] = clipLR(x[rowidx * stride + colidx], bitdepth + 1 - Qp, 0);
+#else
       x[rowidx * stride + colidx] = clipLR(x[rowidx * stride + colidx], bitdepth + 2 - Qp, 0);
+#endif
     }
   }
 }
