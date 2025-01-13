@@ -155,6 +155,41 @@ void dequantize(double* x, int width, int height, int stride, int Qp)
   }
 }
 
+unsigned long coded_bits(double* x, int width, int height, int stride)
+{
+  unsigned long bits = 0UL;
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      if (rowidx < height/2 && colidx < width/2)
+      {
+        //fixed length coding for the LL band
+        bits += 10UL;
+      }
+      else
+      {
+        //Huffman coding for all three details bands
+        bits += (unsigned long)(x[rowidx * stride + colidx] + 1);
+      }
+    }
+  }
+  return bits;
+}
+
+unsigned long mse_dist(double* src, double* reco, int width, int height, int stride)
+{
+  unsigned long dist = 0UL;
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      dist += ((src[rowidx * stride + colidx] - reco[rowidx * stride + colidx]) * (src[rowidx * stride + colidx] - reco[rowidx * stride + colidx]));
+    }
+  }
+  return dist;
+}
+
 void dbls_to_file(const char* fname, double* data, int len)
 {
   int* int_res = (int*)malloc(len * sizeof(int));
@@ -223,6 +258,10 @@ int main(int argc, char **argv)
   int bitdepth = estBitdepth(x, width, height, width);
   printf("processing input: bit-depth input image=%d, QP=%d\n", bitdepth, QP);
 
+  //rate-distortion parameter
+  unsigned long bits = 0UL;
+  unsigned long dist = 0UL;
+
   //quad split and for each block do first compression and then decompression
   for (int blk = 0; blk < 4; blk++)
   {
@@ -248,17 +287,21 @@ int main(int argc, char **argv)
       blkcpy(currResi, currTrafo, width/blkratio, height/blkratio, width);
       transform(currTrafo, width/blkratio, height/blkratio, width, bitdepth);
       quantize(currTrafo, width/blkratio, height/blkratio, width, bitdepth, QP);
+      bits += coded_bits(currTrafo, width/blkratio, height/blkratio, width);
       blkcpy(currTrafo, currReco, width/blkratio, height/blkratio, width);
       //decompression
       dequantize(currReco, width/blkratio, height/blkratio, width, QP);
       inv_transform(currReco, width/blkratio, height/blkratio, width, bitdepth);
       predict(subblk, currReco, NULL, width/blkratio, height/blkratio, width, bitdepth);
+      dist += mse_dist(currOrig, currReco, width/blkratio, height/blkratio, width);
     }
   }
   //safe everything to files
   dbls_to_file("resi.bin", resi, width * height);
   dbls_to_file("coeffs.bin", trafo, width * height);
   dbls_to_file("reco.bin", reco, width * height);
+
+  printf("Costs: MSE = %lu, Bits = %lu\n", dist, bits);
   
   free(x);
   free(resi);
