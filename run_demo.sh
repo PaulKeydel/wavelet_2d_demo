@@ -7,11 +7,11 @@ fi
 
 make
 
-./comp_demo astronaut.bin 512 512 1
+./comp_demo astronaut.bin 512 512 1 1
 python3 visualize.py 512 512 demo_stepsize1.svg
 
-./comp_demo astronaut.bin 512 512 8
+./comp_demo astronaut.bin 512 512 8 1
 python3 visualize.py 512 512 demo_stepsize8.svg
 
-./comp_demo astronaut.bin 512 512 32
+./comp_demo astronaut.bin 512 512 32 1
 python3 visualize.py 512 512 demo_stepsize32.svg
