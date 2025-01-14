@@ -266,8 +266,8 @@ int main(int argc, char **argv)
   {
     int predMode = 3;
     if (subblk == 0) predMode = 0;
-    if (subblk / blkStride == 0) predMode = 1;
-    if (subblk % blkStride == 0) predMode = 2;
+    if (subblk != 0 && subblk / blkStride == 0) predMode = 1;
+    if (subblk != 0 && subblk % blkStride == 0) predMode = 2;
 
     int offset = (subblk / blkStride) * blkHeight * width + (subblk % blkStride) * blkWidth;
     double* currOrig = x + offset;
