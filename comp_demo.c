@@ -8,26 +8,25 @@
 #define USE_TAUBMANN   0
 #define MAX_BLOCK_SIZE 256
 
-double clipLR(double val, int bitdepth, int shift)
+int clipLR(int val, int bitdepth, int shift)
 {
   assert(shift < bitdepth);
-  double min = 0;
-  double max = (1 << bitdepth) - 1;
-  double shift_val = (1 << shift) - 1;
+  int min = 0;
+  int max = (1 << bitdepth) - 1;
+  int shift_val = (1 << shift) - 1;
   if (val + shift_val < min) return min - shift_val;
   if (val + shift_val > max) return max - shift_val;
   return val;
 }
 
-void predict(int predMode, double* reco, double* dst, int width, int height, int stride, int bitdepth)
+void predict(int predMode, int* reco, int* dst, int width, int height, int stride, int bitdepth)
 {
   int defaultPred = 1 << (bitdepth - 1);
-  int maxPixel = (1 << bitdepth) - 1;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      double pred = 0;
+      int pred = 0;
       if (predMode == 0)
       {
         pred = defaultPred;
@@ -57,7 +56,7 @@ void predict(int predMode, double* reco, double* dst, int width, int height, int
   }
 }
 
-void transform(double* x, int width, int height, int stride)
+void transform(int* src, int width, int height, int stride)
 {
 #if !USE_TAUBMANN
   //filter set sqrt(2):sqrt(2) normalization
@@ -72,14 +71,30 @@ void transform(double* x, int width, int height, int stride)
   double h_ana[9] = { 0.026748, -0.016864, -0.078223,  0.266864, 0.602949,  0.266864, -0.078223, -0.016864, 0.026748 };
   double g_syn[9] = { 0.053496,  0.033728, -0.156446, -0.533728, 1.205898, -0.533728, -0.156446,  0.033728, 0.053496 };
 #endif
+  double* dsrc = (double*)malloc(width * height * sizeof(double));
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      dsrc[rowidx * width + colidx] = (double)src[rowidx * stride + colidx];
+    }
+  }
 #if USE_TAUBMANN
-  convWT_2d(h_ana, 9, g_ana, 7, x, width, height, stride);
+  convWT_2d(h_ana, 9, g_ana, 7, dsrc, width, height, width);
 #else
-  lwt97_2d(x, width, height, stride);
+  lwt97_2d(dsrc, width, height, width);
 #endif
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      src[rowidx * stride + colidx] = (int)round(dsrc[rowidx * width + colidx]);
+    }
+  }
+  free(dsrc);
 }
 
-void inv_transform(double* x, int width, int height, int stride)
+void inv_transform(int* src, int width, int height, int stride)
 {
 #if !USE_TAUBMANN
   //filter set sqrt(2):sqrt(2) normalization
@@ -94,55 +109,71 @@ void inv_transform(double* x, int width, int height, int stride)
   double h_ana[9] = { 0.026748, -0.016864, -0.078223,  0.266864, 0.602949,  0.266864, -0.078223, -0.016864, 0.026748 };
   double g_syn[9] = { 0.053496,  0.033728, -0.156446, -0.533728, 1.205898, -0.533728, -0.156446,  0.033728, 0.053496 };
 #endif
+  double* dsrc = (double*)malloc(width * height * sizeof(double));
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      dsrc[rowidx * width + colidx] = (double)src[rowidx * stride + colidx];
+    }
+  }
 #if USE_TAUBMANN
-  invconvWT_2d(h_syn, 7, g_syn, 9, x, width, height, stride);
+  invconvWT_2d(h_syn, 7, g_syn, 9, dsrc, width, height, width);
 #else
-  ilwt97_2d(x, width, height, stride);
+  ilwt97_2d(dsrc, width, height, width);
 #endif
-}
-
-int estBitdepth(double* x, int width, int height, int stride)
-{
-  double max = fabs(x[0]);
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      if (fabs(x[rowidx * stride + colidx]) > max) max = fabs(x[rowidx * stride + colidx]);
+      src[rowidx * stride + colidx] = (int)round(dsrc[rowidx * width + colidx]);
     }
   }
-  return (int)ceil(log2(max));
+  free(dsrc);
 }
 
-void quantize(double* x, int width, int height, int stride, int bitdepth, int Qp)
+int estBitdepth(int* x, int width, int height, int stride)
+{
+  int max = abs(x[0]);
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      if (abs(x[rowidx * stride + colidx]) > max) max = abs(x[rowidx * stride + colidx]);
+    }
+  }
+  return (int)ceil(log2((double)max));
+}
+
+void quantize(int* src, int width, int height, int stride, int bitdepth, int Qp)
 {
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      int sgn = x[rowidx * stride + colidx] < 0 ? -1 : 1;
-      x[rowidx * stride + colidx] = sgn * floor(fabs(x[rowidx * stride + colidx]) / (1 << Qp));
+      int sgn = src[rowidx * stride + colidx] < 0 ? -1 : 1;
+      src[rowidx * stride + colidx] = sgn * (abs(src[rowidx * stride + colidx]) >> Qp);
 #if USE_TAUBMANN
-      x[rowidx * stride + colidx] = clipLR(x[rowidx * stride + colidx], bitdepth + 1 - Qp, bitdepth - Qp);
+      src[rowidx * stride + colidx] = clipLR(src[rowidx * stride + colidx], bitdepth + 1 - Qp, bitdepth - Qp);
 #else
-      x[rowidx * stride + colidx] = clipLR(x[rowidx * stride + colidx], bitdepth + 2 - Qp, bitdepth + 1 - Qp);
+      src[rowidx * stride + colidx] = clipLR(src[rowidx * stride + colidx], bitdepth + 2 - Qp, bitdepth + 1 - Qp);
 #endif
     }
   }
 }
 
-void dequantize(double* x, int width, int height, int stride, int Qp)
+void dequantize(int* src, int width, int height, int stride, int Qp)
 {
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      x[rowidx * stride + colidx] *= (1 << Qp);
+      src[rowidx * stride + colidx] *= (1 << Qp);
     }
   }
 }
 
-unsigned long coded_bits(double* x, int width, int height, int stride, int bitdepth, int Qp)
+unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth, int Qp)
 {
   unsigned long bits = 0UL;
 #if USE_TAUBMANN
@@ -150,6 +181,7 @@ unsigned long coded_bits(double* x, int width, int height, int stride, int bitde
 #else
   int trafoBD = bitdepth + 2 - Qp;
 #endif
+  unsigned long signBit;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
@@ -162,14 +194,15 @@ unsigned long coded_bits(double* x, int width, int height, int stride, int bitde
       else
       {
         //Huffman coding for all three details bands
-        bits += (unsigned long)(x[rowidx * stride + colidx] + 1);
+        signBit = x[rowidx * stride + colidx] == 0 ? 0UL : 1UL;
+        bits += (unsigned long)(abs(x[rowidx * stride + colidx]) + 1) + signBit;
       }
     }
   }
   return bits;
 }
 
-unsigned long mse_dist(double* src, double* reco, int width, int height, int stride)
+unsigned long mse_dist(int* src, int* reco, int width, int height, int stride)
 {
   unsigned long dist = 0UL;
   for (int rowidx = 0; rowidx < height; rowidx++)
@@ -182,45 +215,35 @@ unsigned long mse_dist(double* src, double* reco, int width, int height, int str
   return dist;
 }
 
-void dbls_to_file(const char* fname, double* data, int len)
+void dbls_to_file(const char* fname, int* data, int len)
 {
-  int* int_res = (int*)malloc(len * sizeof(int));
-  for (int i = 0; i < len; i++) 
-  {
-    int_res[i] = (int)round(data[i]);
-  }
   FILE *fp = fopen(fname, "wb");
   if(fp == NULL)
   {
     printf("error creating file");
+    exit(EXIT_FAILURE);
   }
-  fwrite((const void*)int_res, sizeof(int), len, fp);
+  fwrite((const void*)data, sizeof(int), len, fp);
   fclose(fp);
-  free(int_res);
 }
 
-void dbls_from_file(const char* fname, double* data, int len)
+void dbls_from_file(const char* fname, int* data, int len)
 {
-  int* int_res = (int*)malloc(len * sizeof(int));
   FILE *fp = fopen(fname, "rb");
   if(fp == NULL)
   {
     printf("error opening file");
+    exit(EXIT_FAILURE);
   }
-  fread((void*)int_res, sizeof(int), len, fp);
+  fread((void*)data, sizeof(int), len, fp);
   fclose(fp);
-  for (int i = 0; i < len; i++) 
-  {
-    data[i] = (double)int_res[i];
-  }
-  free(int_res);
 }
 
-void blkcpy(double* src, double* dst, int width, int height, int stride)
+void blkcpy(int* src, int* dst, int width, int height, int stride)
 {
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
-    memcpy(dst + rowidx * stride, src + rowidx * stride, width * sizeof(double));
+    memcpy(dst + rowidx * stride, src + rowidx * stride, width * sizeof(int));
   }
 }
 
@@ -238,10 +261,10 @@ int main(int argc, char **argv)
   int height    = atoi(argv[3]);
   int QP        = (int)round(log2(atoi(argv[4])));
   int partDepth = atoi(argv[5]);
-  double* x     = (double*)malloc(width * height * sizeof(double));
-  double* resi  = (double*)malloc(width * height * sizeof(double));
-  double* trafo = (double*)malloc(width * height * sizeof(double));
-  double* reco  = (double*)malloc(width * height * sizeof(double));
+  int* x        = (int*)malloc(width * height * sizeof(int));
+  int* resi     = (int*)malloc(width * height * sizeof(int));
+  int* trafo    = (int*)malloc(width * height * sizeof(int));
+  int* reco     = (int*)malloc(width * height * sizeof(int));
 
   //load data and copy to orig.bin
   dbls_from_file(argv[1], x, width * height);
@@ -270,10 +293,10 @@ int main(int argc, char **argv)
     if (subblk != 0 && subblk % blkStride == 0) predMode = 2;
 
     int offset = (subblk / blkStride) * blkHeight * width + (subblk % blkStride) * blkWidth;
-    double* currOrig = x + offset;
-    double* currResi = resi + offset;
-    double* currTrafo = trafo + offset;
-    double* currReco = reco + offset;
+    int* currOrig = x + offset;
+    int* currResi = resi + offset;
+    int* currTrafo = trafo + offset;
+    int* currReco = reco + offset;
     //compression: prediction, 9/7 transformtion and quatization
     blkcpy(currOrig, currResi, blkWidth, blkHeight, width);
     predict(predMode, currReco, currResi, blkWidth, blkHeight, width, bitdepth);
