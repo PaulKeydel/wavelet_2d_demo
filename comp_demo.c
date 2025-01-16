@@ -41,7 +41,7 @@ void predict(int predMode, int* reco, int* dst, int width, int height, int strid
       }
       else if (predMode == 3)
       {
-        pred = 0.5 * (reco[colidx - stride] + reco[rowidx * stride - 1]);
+        pred = (reco[colidx - stride] + reco[rowidx * stride - 1]) >> 1;
       }
       //subtract or add prediction value
       if (dst != NULL)
@@ -215,7 +215,7 @@ unsigned long mse_dist(int* src, int* reco, int width, int height, int stride)
   return dist;
 }
 
-void dbls_to_file(const char* fname, int* data, int len)
+void array_to_file(const char* fname, int* data, int len)
 {
   FILE *fp = fopen(fname, "wb");
   if(fp == NULL)
@@ -227,7 +227,7 @@ void dbls_to_file(const char* fname, int* data, int len)
   fclose(fp);
 }
 
-void dbls_from_file(const char* fname, int* data, int len)
+void array_from_file(const char* fname, int* data, int len)
 {
   FILE *fp = fopen(fname, "rb");
   if(fp == NULL)
@@ -267,8 +267,8 @@ int main(int argc, char **argv)
   int* reco     = (int*)malloc(width * height * sizeof(int));
 
   //load data and copy to orig.bin
-  dbls_from_file(argv[1], x, width * height);
-  dbls_to_file("orig.bin", x, width * height);
+  array_from_file(argv[1], x, width * height);
+  array_to_file("orig.bin", x, width * height);
 
   //estimate bit-depth
   int bitdepth = estBitdepth(x, width, height, width);
@@ -312,9 +312,9 @@ int main(int argc, char **argv)
     dist += mse_dist(currOrig, currReco, blkWidth, blkHeight, width);
   }
   //safe everything to files
-  dbls_to_file("resi.bin", resi, width * height);
-  dbls_to_file("coeffs.bin", trafo, width * height);
-  dbls_to_file("reco.bin", reco, width * height);
+  array_to_file("resi.bin", resi, width * height);
+  array_to_file("coeffs.bin", trafo, width * height);
+  array_to_file("reco.bin", reco, width * height);
 
   printf("Relative distortion (MSE): %f\n", (double)dist / (double)(width * height));
   printf("Compression rate: %f\n", 1.0 - (double)bits / (double)(bitdepth * width * height));
