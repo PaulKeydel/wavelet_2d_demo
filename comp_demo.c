@@ -272,7 +272,7 @@ int main(int argc, char **argv)
 
   //estimate bit-depth
   int bitdepth = estBitdepth(x, width, height, width);
-  printf("processing input: bit-depth input image=%d, QP=%d\n", bitdepth, QP);
+  printf("processing input: bit-depth input image=%d, QP=%d, partitioning depth=%d\n", bitdepth, QP, partDepth);
 
   //rate-distortion parameter
   unsigned long bits = 0UL;
