@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <math.h>
 #include "w97.h"
@@ -19,7 +20,7 @@ int clipLR(int val, int bitdepth, int shift)
   return val;
 }
 
-void predict(int predMode, int* reco, int* dst, int width, int height, int stride, int bitdepth)
+void predict(int predMode, int* reco, int* dst, int width, int height, int stride, bool hasLeft, bool hasTop, int bitdepth)
 {
   int defaultPred = 1 << (bitdepth - 1);
   for (int rowidx = 0; rowidx < height; rowidx++)
@@ -33,15 +34,15 @@ void predict(int predMode, int* reco, int* dst, int width, int height, int strid
       }
       else if (predMode == 1)
       {
-        pred = reco[rowidx * stride - 1];
+        pred = hasLeft ? reco[rowidx * stride - 1] : defaultPred;
       }
       else if (predMode == 2)
       {
-        pred = reco[colidx - stride];
+        pred = hasTop ? reco[colidx - stride] : defaultPred;
       }
       else if (predMode == 3)
       {
-        pred = (reco[colidx - stride] + reco[rowidx * stride - 1]) >> 1;
+        pred = (hasLeft && hasTop) ? ((reco[colidx - stride] + reco[rowidx * stride - 1]) >> 1) : defaultPred;
       }
       //subtract or add prediction value
       if (dst != NULL)
@@ -287,10 +288,17 @@ int main(int argc, char **argv)
   //quad split and for each block do first compression and then decompression
   for (int subblk = 0; subblk < numBlocks; subblk++)
   {
-    int predMode = 3;
-    if (subblk == 0) predMode = 0;
-    if (subblk != 0 && subblk / blkStride == 0) predMode = 1;
-    if (subblk != 0 && subblk % blkStride == 0) predMode = 2;
+    bool leftMargin = true;
+    bool topMargin = true;
+    if (subblk == 0)
+    {
+      leftMargin = false;
+      topMargin = false;
+    }
+    if (subblk != 0 && subblk / blkStride == 0) topMargin = false;
+    if (subblk != 0 && subblk % blkStride == 0) leftMargin = false;
+    int predMode = 2 * (int)topMargin + (int)leftMargin;
+    //predMode = 1;
 
     int offset = (subblk / blkStride) * blkHeight * width + (subblk % blkStride) * blkWidth;
     int* currOrig = x + offset;
@@ -299,7 +307,7 @@ int main(int argc, char **argv)
     int* currReco = reco + offset;
     //compression: prediction, 9/7 transformtion and quatization
     blkcpy(currOrig, currResi, blkWidth, blkHeight, width);
-    predict(predMode, currReco, currResi, blkWidth, blkHeight, width, bitdepth);
+    predict(predMode, currReco, currResi, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
     blkcpy(currResi, currTrafo, blkWidth, blkHeight, width);
     transform(currTrafo, blkWidth, blkHeight, width);
     quantize(currTrafo, blkWidth, blkHeight, width, bitdepth, QP);
@@ -308,7 +316,7 @@ int main(int argc, char **argv)
     //decompression
     dequantize(currReco, blkWidth, blkHeight, width, QP);
     inv_transform(currReco, blkWidth, blkHeight, width);
-    predict(predMode, currReco, NULL, blkWidth, blkHeight, width, bitdepth);
+    predict(predMode, currReco, NULL, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
     dist += mse_dist(currOrig, currReco, blkWidth, blkHeight, width);
   }
   //safe everything to files
