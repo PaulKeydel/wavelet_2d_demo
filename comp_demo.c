@@ -133,27 +133,30 @@ void inv_transform(int* src, int width, int height, int stride)
   free(dsrc);
 }
 
-int estBitdepth(int* x, int width, int height, int stride)
+int calcBitdepth(int x)
 {
-  int max = abs(x[0]);
-  for (int rowidx = 0; rowidx < height; rowidx++)
-  {
-    for (int colidx = 0; colidx < width; colidx++)
-    {
-      if (abs(x[rowidx * stride + colidx]) > max) max = abs(x[rowidx * stride + colidx]);
-    }
-  }
-  return (int)ceil(log2((double)max));
+  return (int)ceil(round(1000 * log2((double)x + 1.0)) / 1000);
 }
 
-void quantize(int* src, int width, int height, int stride, int bitdepth, int Qp)
+int calcMaxBitdepth(int* x, int n)
 {
+  int max = abs(x[0]);
+  for (int i = 0; i < n; i++)
+  {
+    if (abs(x[i]) > max) max = abs(x[i]);
+  }
+  return calcBitdepth(max);
+}
+
+void quantize(int* src, int width, int height, int stride, int bitdepth, int quantsize)
+{
+  int Qp = calcBitdepth(quantsize - 1);
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
       int sgn = src[rowidx * stride + colidx] < 0 ? -1 : 1;
-      src[rowidx * stride + colidx] = sgn * (abs(src[rowidx * stride + colidx]) >> Qp);
+      src[rowidx * stride + colidx] = sgn * (abs(src[rowidx * stride + colidx]) / quantsize);
 #if USE_TAUBMANN
       src[rowidx * stride + colidx] = clipLR(src[rowidx * stride + colidx], bitdepth + 1 - Qp, bitdepth - Qp);
 #else
@@ -163,13 +166,13 @@ void quantize(int* src, int width, int height, int stride, int bitdepth, int Qp)
   }
 }
 
-void dequantize(int* src, int width, int height, int stride, int Qp)
+void dequantize(int* src, int width, int height, int stride, int quantsize)
 {
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      src[rowidx * stride + colidx] *= (1 << Qp);
+      src[rowidx * stride + colidx] *= quantsize;
     }
   }
 }
@@ -250,18 +253,19 @@ void blkcpy(int* src, int* dst, int width, int height, int stride)
 
 int main(int argc, char **argv)
 {
-  if (argc != 6)
+  if (argc != 7)
   {
     printf("Not enough or missing parameter!\n");
-    printf("Usage: comp_demo <image_file> <width> <height> <quant step-size> <partitioning depth>\n");
+    printf("Usage: comp_demo <image_file> <width> <height> <prediction mode> <quant step-size> <partitioning depth>\n");
     return -1;
   }
 
   //declarations
   int width     = atoi(argv[2]);
   int height    = atoi(argv[3]);
-  int QP        = (int)round(log2(atoi(argv[4])));
-  int partDepth = atoi(argv[5]);
+  int predMode  = atoi(argv[4]);
+  int quantSize = atoi(argv[5]);
+  int partDepth = atoi(argv[6]);
   int* x        = (int*)malloc(width * height * sizeof(int));
   int* resi     = (int*)malloc(width * height * sizeof(int));
   int* trafo    = (int*)malloc(width * height * sizeof(int));
@@ -271,8 +275,9 @@ int main(int argc, char **argv)
   array_from_file(argv[1], x, width * height);
   array_to_file("orig.bin", x, width * height);
 
-  //estimate bit-depth
-  int bitdepth = estBitdepth(x, width, height, width);
+  //estimate bit-depth and QP value
+  int bitdepth = calcMaxBitdepth(x, width * height);
+  int QP       = calcBitdepth(quantSize - 1);
   printf("processing input: bit-depth input image=%d, QP=%d, partitioning depth=%d\n", bitdepth, QP, partDepth);
 
   //rate-distortion parameter
@@ -297,8 +302,15 @@ int main(int argc, char **argv)
     }
     if (subblk != 0 && subblk / blkStride == 0) topMargin = false;
     if (subblk != 0 && subblk % blkStride == 0) leftMargin = false;
-    int predMode = 2 * (int)topMargin + (int)leftMargin;
-    //predMode = 1;
+    int blkMode = -1;
+    if (predMode < 4)
+    {
+      blkMode = predMode;
+    }
+    else if (predMode == 4)
+    {
+      blkMode = 2 * (int)topMargin + (int)leftMargin;
+    }
 
     int offset = (subblk / blkStride) * blkHeight * width + (subblk % blkStride) * blkWidth;
     int* currOrig = x + offset;
@@ -307,16 +319,16 @@ int main(int argc, char **argv)
     int* currReco = reco + offset;
     //compression: prediction, 9/7 transformtion and quatization
     blkcpy(currOrig, currResi, blkWidth, blkHeight, width);
-    predict(predMode, currReco, currResi, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
+    predict(blkMode, currReco, currResi, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
     blkcpy(currResi, currTrafo, blkWidth, blkHeight, width);
     transform(currTrafo, blkWidth, blkHeight, width);
-    quantize(currTrafo, blkWidth, blkHeight, width, bitdepth, QP);
+    quantize(currTrafo, blkWidth, blkHeight, width, bitdepth, quantSize);
     bits += coded_bits(currTrafo, blkWidth, blkHeight, width, bitdepth, QP);
     blkcpy(currTrafo, currReco, blkWidth, blkHeight, width);
     //decompression
-    dequantize(currReco, blkWidth, blkHeight, width, QP);
+    dequantize(currReco, blkWidth, blkHeight, width, quantSize);
     inv_transform(currReco, blkWidth, blkHeight, width);
-    predict(predMode, currReco, NULL, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
+    predict(blkMode, currReco, NULL, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
     dist += mse_dist(currOrig, currReco, blkWidth, blkHeight, width);
   }
   //safe everything to files
