@@ -6,8 +6,9 @@
 #include <math.h>
 #include "w97.h"
 
-#define USE_TAUBMANN   0
-#define MAX_BLOCK_SIZE 256
+#define USE_TAUBMANN    0
+#define MAX_BLOCK_SIZE  256
+#define LL_FIXED_LENGTH 0
 
 int clipLR(int val, int bitdepth, int shift)
 {
@@ -180,6 +181,7 @@ void dequantize(int* src, int width, int height, int stride, int quantsize)
 unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth, int Qp)
 {
   unsigned long bits = 0UL;
+#if LL_FIXED_LENGTH
 #if USE_TAUBMANN
   int trafoBD = bitdepth + 1 - Qp;
 #else
@@ -187,14 +189,16 @@ unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth
 #endif
   //fixed length coding for the LL band
   bits = (height / 2) * (width / 2) * (unsigned long)trafoBD;
-  //Huffman coding for all three details bands
+#endif
+  //Huffman coding depending on LL_FIXED_LENGTH: all four subbands or the three details bands only
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      if (rowidx >= height/2 || colidx >= width/2)
+      if ((rowidx >= height/2 || colidx >= width/2) || !LL_FIXED_LENGTH)
       {
-        bits += (unsigned long)(abs(x[rowidx * stride + colidx]) + 1) + 1UL;//last bit is for sign
+        unsigned long signBit = x[rowidx * stride + colidx] != 0 ? 1UL : 0UL;
+        bits += (unsigned long)(abs(x[rowidx * stride + colidx]) + 1) + signBit;
       }
     }
   }
