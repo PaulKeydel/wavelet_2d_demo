@@ -185,21 +185,16 @@ unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth
 #else
   int trafoBD = bitdepth + 2 - Qp;
 #endif
-  unsigned long signBit;
+  //fixed length coding for the LL band
+  bits = (height / 2) * (width / 2) * (unsigned long)trafoBD;
+  //Huffman coding for all three details bands
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      if (rowidx < height/2 && colidx < width/2)
+      if (rowidx >= height/2 || colidx >= width/2)
       {
-        //fixed length coding for the LL band
-        bits += (unsigned long)trafoBD;
-      }
-      else
-      {
-        //Huffman coding for all three details bands
-        signBit = x[rowidx * stride + colidx] == 0 ? 0UL : 1UL;
-        bits += (unsigned long)(abs(x[rowidx * stride + colidx]) + 1) + signBit;
+        bits += (unsigned long)(abs(x[rowidx * stride + colidx]) + 1) + 1UL;//last bit is for sign
       }
     }
   }
@@ -337,6 +332,7 @@ int main(int argc, char **argv)
   array_to_file("reco.bin", reco, width * height);
 
   printf("Relative distortion (MSE): %f\n", (double)dist / (double)(width * height));
+  printf("Length of bitstream (Bytes): %lu\n", bits / 8UL);
   printf("Compression rate: %f\n", 1.0 - (double)bits / (double)(bitdepth * width * height));
   
   free(x);
