@@ -7,7 +7,7 @@ import numpy as np
 
 dist = list()
 bitlen = list()
-qsize = list()
+labels = list()
 for predMode in range(0, 5):
     for quantSize in range(4, 65, 4):
         for splitLevel in range(2, 6):
@@ -17,17 +17,22 @@ for predMode in range(0, 5):
             p.wait()
             output = output.decode("utf-8")
             #print(output)
-            qsize.append(quantSize)
             dist.append(float(output.split("\n")[1].split(" ")[-1]))
             bitlen.append(int(output.split("\n")[2].split(" ")[-1]) // 1024)
-#print(dist)
-#print(bitlen)
+            labels.append({"predMode": predMode, "quantSize": quantSize, "splitLevel": splitLevel})
 
 points = np.array([list(t) for t in zip(bitlen, dist)])
 hull = ConvexHull(points)
+simplices = hull.simplices[3:]
+vertices = hull.vertices[3:]
 
-plt.scatter(bitlen, dist, c=qsize)
-for simplex in hull.simplices[3:]:
+print("Points forming the Pareto frontier:")
+for vertex in vertices:
+    print(str(points[vertex]) + ":  " + str(labels[vertex]))
+
+cats = [t["quantSize"] for t in labels]
+plt.scatter(bitlen, dist, c=cats)
+for simplex in simplices:
     plt.plot(points[simplex, 0], points[simplex, 1], 'k-')
 plt.colorbar()
 plt.xlabel("Länge Bitstream [Kilobytes]")
