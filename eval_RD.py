@@ -34,6 +34,8 @@ cats = [t["quantSize"] for t in labels]
 plt.scatter(bitlen, dist, c=cats)
 for simplex in simplices:
     plt.plot(points[simplex, 0], points[simplex, 1], 'k-')
+for vertex in vertices[0:8]:
+    plt.text(points[vertex, 0], points[vertex, 1], str(labels[vertex]))
 plt.colorbar()
 plt.xlabel("Länge Bitstream [Kilobytes]")
 plt.ylabel("Mittlerer quadratischer Fehler [1/Pixel]")
