@@ -1,5 +1,6 @@
 #!/usr/local/bin/python3
 
+import sys
 import subprocess
 import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
@@ -9,7 +10,7 @@ dist = list()
 bitlen = list()
 labels = list()
 for predMode in range(0, 5):
-    for quantSize in range(4, 65, 4):
+    for quantSize in range(8, 65, 8):
         for splitLevel in range(2, 6):
             command = "./comp_demo astronaut.bin 512 512 " + str(predMode) + " " + str(quantSize) + " " + str(splitLevel)
             p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
@@ -32,11 +33,25 @@ for vertex in vertices:
 
 cats = [t["quantSize"] for t in labels]
 plt.scatter(bitlen, dist, c=cats)
+plt.xlim(-50, None)
 for simplex in simplices:
     plt.plot(points[simplex, 0], points[simplex, 1], 'k-')
 for vertex in vertices[0:8]:
-    plt.text(points[vertex, 0], points[vertex, 1], str(labels[vertex]))
+    plt.text(points[vertex, 0] - 3, points[vertex, 1], str(labels[vertex]), horizontalalignment="right")
+for qs in [16, 32, 64]:
+    x_series = np.array(bitlen)[[labels[i]["quantSize"] == qs for i in range(len(points))]]
+    y_series = np.array(dist)[[labels[i]["quantSize"] == qs for i in range(len(points))]]
+    x_tickz = np.array([x_series.min() - 3, x_series.max() + 6])
+    A = np.vstack([x_series, np.ones(len(x_series))]).T
+    m, c = np.linalg.lstsq(A, y_series, rcond=None)[0]
+    plt.plot(x_tickz, m * x_tickz + c, 'r:')
 plt.colorbar()
 plt.xlabel("Länge Bitstream [Kilobytes]")
 plt.ylabel("Mittlerer quadratischer Fehler [1/Pixel]")
-plt.show()
+
+if (len(sys.argv) == 1):
+    plt.show()
+else:
+    fig = plt.gcf()
+    fig.set_size_inches(18.5, 10.5)
+    fig.savefig(sys.argv[1], format="svg", bbox_inches="tight", dpi=100)
