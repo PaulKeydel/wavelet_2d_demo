@@ -336,7 +336,7 @@ int main(int argc, char **argv)
   array_to_file("reco.bin", reco, width * height);
 
   printf("Relative distortion (MSE): %f\n", (double)dist / (double)(width * height));
-  printf("Length of bitstream (Bytes): %lu\n", bits / 8UL);
+  printf("Average symbol length (Bits): %f\n", (double)bits / (double)(width * height));
   printf("Compression rate: %f\n", 1.0 - (double)bits / (double)(bitdepth * width * height));
   
   free(x);
