@@ -18,51 +18,91 @@ for predMode in range(0, 5):
             (output, err) = p.communicate()
             p.wait()
             output = output.decode("utf-8")
-            #print(output)
-            dist.append(float(output.split("\n")[1].split(" ")[-1]))
-            bitlen.append(float(output.split("\n")[2].split(" ")[-1]))
-            labels.append({"predMode": predMode, "quantSize": quantSize, "splitLevel": splitLevel})
+            dist_val = float(output.split("\n")[1].split(" ")[-1])
+            bitlen_val = float(output.split("\n")[2].split(" ")[-1])
+            #to make the figure looking nicer, remove higher bitrates
+            if bitlen_val <= 5:
+                dist.append(dist_val)
+                bitlen.append(bitlen_val)
+                labels.append({"predMode": predMode, "quantSize": quantSize, "splitLevel": splitLevel})
 
 points = np.array([list(t) for t in zip(bitlen, dist)])
 hull = ConvexHull(points)
 
 simplices = list()
-vertices = set()
+vertices = list()
 for simplex in hull.simplices[1:]:
     p0 = [points[simplex, 0][0], points[simplex, 1][0]]
     p1 = [points[simplex, 0][1], points[simplex, 1][1]]
     slope = (p1[1] - p0[1]) / (p1[0] - p0[0])
     if (slope <= -10) and (slope > -100000):
+        vertex0 = np.where(points == p0)[0][0]
+        vertex1 = np.where(points == p1)[0][0]
         simplices.append(simplex)
-        vertices.add(np.where(points == p0)[0][0])
-        vertices.add(np.where(points == p1)[0][0])
+        vertices = list(set(vertices + [vertex0, vertex1]))
 assert(len(vertices) - 1 == len(simplices))
+vertices = sorted(vertices, key=lambda x: labels[x]["quantSize"])
 
-print("Points forming the Pareto frontier:")
-for vertex in vertices:
+hull_parameters = {"qs": [], "lambda": [], "minCost": []}
+for i, vertex in enumerate(vertices):
+    qs = labels[vertex]["quantSize"]
+    p = points[vertex]
+    pl = None
+    pr = None
+    slope = None
+    if (i > 0) and (i < len(vertices) - 1):
+        pl = points[vertices[i - 1]]
+        pr = points[vertices[i + 1]]
+        slope = (pr[1] - pl[1]) / (pr[0] - pl[0])
+    elif i == 0:
+        pr = points[vertices[i + 1]]
+        slope = (pr[1] - p[1]) / (pr[0] - p[0])
+    elif i == len(vertices) - 1:
+        pl = points[vertices[i - 1]]
+        slope = (p[1] - pl[1]) / (p[0] - pl[0])
+    minCost = dist[vertex] - slope * bitlen[vertex]
+    hull_parameters["qs"].append(qs)
+    hull_parameters["lambda"].append(-slope)
+    hull_parameters["minCost"].append(minCost)
     print(str(points[vertex]) + ":  " + str(labels[vertex]))
+    print("Lambda: " + str(-slope))
+    print("Min. Costs: " + str(minCost))
 
-cats = [t["quantSize"] for t in labels]
-plt.scatter(bitlen, dist, c=cats)
-plt.xlim(-2, None)
-for simplex in simplices:
-    plt.plot(points[simplex, 0], points[simplex, 1], 'k-')
-for vertex in vertices:
-    plt.text(points[vertex, 0] - 0.1, points[vertex, 1], str(labels[vertex]), horizontalalignment="right")
-for qs in [16, 32, 64]:
-    x_series = np.array(bitlen)[[labels[i]["quantSize"] == qs for i in range(len(points))]]
-    y_series = np.array(dist)[[labels[i]["quantSize"] == qs for i in range(len(points))]]
-    x_tickz = np.array([x_series.min() - 0.1, x_series.max() + 0.1])
-    A = np.vstack([x_series, np.ones(len(x_series))]).T
-    m, c = np.linalg.lstsq(A, y_series, rcond=None)[0]
-    plt.plot(x_tickz, m * x_tickz + c, 'r:')
-plt.colorbar()
-plt.xlabel("Mittlere Code-Länge [Bits/Pixel]")
-plt.ylabel("Mittlerer quadratischer Fehler [1/Pixel]")
+costs = np.zeros(len(points))
+for i in range(len(points)):
+    qs = labels[i]["quantSize"]
+    Lambda = hull_parameters["lambda"][hull_parameters["qs"].index(qs)]
+    minJ = hull_parameters["minCost"][hull_parameters["qs"].index(qs)]
+    costs[i] = (dist[i] + Lambda * bitlen[i]) / minJ
 
-if (len(sys.argv) == 1):
-    plt.show()
-else:
-    fig = plt.gcf()
-    fig.set_size_inches(18.5, 10.5)
-    fig.savefig(sys.argv[1], format="svg", bbox_inches="tight", dpi=100)
+for figMode in range(2):
+    cats = np.ones(len(points))
+    title = ""
+    if figMode == 0:
+        cats = [t["quantSize"] for t in labels]
+        title = "R-D-points for all compression modes grouped by quantization stepsize"
+    elif figMode == 1:
+        cats = costs
+        title = "Increasing R-D-costs (J = D + λR) orthogonal to the optimal RD-curve"
+    plt.figure()
+    plt.scatter(bitlen, dist, c=cats, cmap="viridis_r")
+    plt.xlim(-1.5, None)
+    for simplex in simplices:
+        plt.plot(points[simplex, 0], points[simplex, 1], 'k-')
+    for vertex in vertices:
+        plt.text(points[vertex, 0] - 0.1, points[vertex, 1], str(labels[vertex]), horizontalalignment="right")
+    plt.colorbar()
+    plt.xlabel("Mittlere Code-Länge [Bits/Pixel]")
+    plt.ylabel("Mittlerer quadratischer Fehler [1/Pixel]")
+    plt.title(title)
+
+    if (len(sys.argv) == 1):
+        plt.show()
+    else:
+        fig = plt.gcf()
+        fig.set_size_inches(15, 9)
+        fname = sys.argv[1]
+        assert(fname.endswith(".svg"))
+        if figMode == 1:
+            fname = fname[:-4] + "_costs.svg"
+        fig.savefig(fname, format="svg", bbox_inches="tight", dpi=100)
