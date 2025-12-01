@@ -43,7 +43,7 @@ for simplex in hull.simplices[1:]:
 assert(len(vertices) - 1 == len(simplices))
 vertices = sorted(vertices, key=lambda x: labels[x]["quantSize"])
 
-hull_parameters = {"qs": [], "lambda": [], "minCost": []}
+hull_parameters = {"qs": [], "lambda": []}
 for i, vertex in enumerate(vertices):
     qs = labels[vertex]["quantSize"]
     p = points[vertex]
@@ -63,17 +63,22 @@ for i, vertex in enumerate(vertices):
     minCost = dist[vertex] - slope * bitlen[vertex]
     hull_parameters["qs"].append(qs)
     hull_parameters["lambda"].append(-slope)
-    hull_parameters["minCost"].append(minCost)
     print(str(points[vertex]) + ":  " + str(labels[vertex]))
     print("Lambda: " + str(-slope))
     print("Min. Costs: " + str(minCost))
 
-costs = np.zeros(len(points))
-for i in range(len(points)):
-    qs = labels[i]["quantSize"]
-    Lambda = hull_parameters["lambda"][hull_parameters["qs"].index(qs)]
-    minJ = hull_parameters["minCost"][hull_parameters["qs"].index(qs)]
-    costs[i] = (dist[i] + Lambda * bitlen[i]) / minJ
+z = np.polyfit(hull_parameters["qs"], hull_parameters["lambda"], 2)
+quad_fit = np.poly1d(z)
+print("Lambda prediction from quantization stepsize:")
+print(quad_fit)
+print("Predicted Lambda values:")
+print([quad_fit(t) for t in hull_parameters["qs"]])
+
+interpolate_lambda = np.vectorize(lambda qs: quad_fit(qs) if qs not in hull_parameters["qs"] else hull_parameters["lambda"][hull_parameters["qs"].index(qs)])
+stepsizes = np.array([t["quantSize"] for t in labels])
+costs = np.array(dist) + interpolate_lambda(stepsizes) * np.array(bitlen)
+minJ = np.array([costs[stepsizes == t].min() for t in stepsizes])
+costs /= minJ
 
 for figMode in range(2):
     cats = np.ones(len(points))
