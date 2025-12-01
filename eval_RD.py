@@ -88,9 +88,18 @@ for figMode in range(2):
     plt.scatter(bitlen, dist, c=cats, cmap="viridis_r")
     plt.xlim(-1.5, None)
     for simplex in simplices:
-        plt.plot(points[simplex, 0], points[simplex, 1], 'k-')
+        plt.plot(points[simplex, 0], points[simplex, 1], "k-")
     for vertex in vertices:
         plt.text(points[vertex, 0] - 0.1, points[vertex, 1], str(labels[vertex]), horizontalalignment="right")
+        if figMode == 0:
+            continue
+        p = points[vertex]
+        qs = labels[vertex]["quantSize"]
+        Lambda = hull_parameters["lambda"][hull_parameters["qs"].index(qs)]
+        m_orth = -1 / (-Lambda)
+        x_tickz = np.array([p[0] - 0.1, p[0] + 1.0])
+        plt.plot(x_tickz, m_orth * (x_tickz - p[0]) + p[1], "g:")
+    #plt.gca().set_yscale("log")
     plt.colorbar()
     plt.xlabel("Mittlere Code-Länge [Bits/Pixel]")
     plt.ylabel("Mittlerer quadratischer Fehler [1/Pixel]")
