@@ -178,7 +178,7 @@ void dequantize(int* src, int width, int height, int stride, int quantsize)
   }
 }
 
-unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth, int Qp)
+unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth, int Qp, FILE* fptr)
 {
   unsigned long bits = 0UL;
 #if LL_FIXED_LENGTH
@@ -197,8 +197,27 @@ unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth
     {
       if ((rowidx >= height/2 || colidx >= width/2) || !LL_FIXED_LENGTH)
       {
-        unsigned long signBit = x[rowidx * stride + colidx] != 0 ? 1UL : 0UL;
-        bits += (unsigned long)(abs(x[rowidx * stride + colidx]) + 1) + signBit;
+        int signFlag = 0;
+        if (x[rowidx * stride + colidx] != 0)
+        {
+          signFlag = x[rowidx * stride + colidx] > 0 ? 1 : -1;
+        }
+        unsigned bitsCurr = (unsigned)(abs(x[rowidx * stride + colidx]) + 1 + abs(signFlag));
+        bits += (unsigned long) bitsCurr;
+
+        char* bitsOut = malloc(bitsCurr);
+        if (signFlag == 0)
+        {
+          bitsOut[0] = '0';
+        }
+        else
+        {
+          memset(bitsOut, '1', bitsCurr - 2);
+          bitsOut[bitsCurr - 2] = '0';
+          bitsOut[bitsCurr - 1] = signFlag < 0 ? '0' : '1';
+        }
+        fprintf(fptr, "%s\n", (const char*)bitsOut);
+        free(bitsOut);
       }
     }
   }
@@ -274,6 +293,9 @@ int main(int argc, char **argv)
   array_from_file(argv[1], x, width * height);
   array_to_file("orig.bin", x, width * height);
 
+  //open text file for output bitstream
+  FILE* fout = fopen("bitstream.txt", "a");
+
   //estimate bit-depth and QP value
   int bitdepth = calcMaxBitdepth(x, width * height);
   int QP       = calcBitdepth(quantSize - 1);
@@ -322,7 +344,7 @@ int main(int argc, char **argv)
     blkcpy(currResi, currTrafo, blkWidth, blkHeight, width);
     transform(currTrafo, blkWidth, blkHeight, width);
     quantize(currTrafo, blkWidth, blkHeight, width, bitdepth, quantSize);
-    bits += coded_bits(currTrafo, blkWidth, blkHeight, width, bitdepth, QP);
+    bits += coded_bits(currTrafo, blkWidth, blkHeight, width, bitdepth, QP, fout);
     blkcpy(currTrafo, currReco, blkWidth, blkHeight, width);
     //decompression
     dequantize(currReco, blkWidth, blkHeight, width, quantSize);
@@ -338,7 +360,8 @@ int main(int argc, char **argv)
   printf("Relative distortion (MSE): %f\n", (double)dist / (double)(width * height));
   printf("Average symbol length (Bits): %f\n", (double)bits / (double)(width * height));
   printf("Compression rate: %f\n", 1.0 - (double)bits / (double)(bitdepth * width * height));
-  
+
+  fclose(fout);
   free(x);
   free(resi);
   free(trafo);
