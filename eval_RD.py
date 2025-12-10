@@ -8,6 +8,7 @@ import numpy as np
 
 dist = list()
 bitlen = list()
+qs = list()
 labels = list()
 for predMode in range(0, 5):
     for quantSize in range(8, 65, 8):
@@ -24,6 +25,7 @@ for predMode in range(0, 5):
             if bitlen_val <= 5:
                 dist.append(dist_val)
                 bitlen.append(bitlen_val)
+                qs.append(quantSize)
                 labels.append({"predMode": predMode, "quantSize": quantSize, "splitLevel": splitLevel})
 
 points = np.array([list(t) for t in zip(bitlen, dist)])
@@ -41,11 +43,10 @@ for simplex in hull.simplices[1:]:
         simplices.append(simplex)
         vertices = list(set(vertices + [vertex0, vertex1]))
 assert(len(vertices) - 1 == len(simplices))
-vertices = sorted(vertices, key=lambda x: labels[x]["quantSize"])
+vertices = sorted(vertices, key=lambda x: qs[x])
 
-hull_parameters = {"qs": [], "lambda": []}
+lambdas = [None] * len(qs)
 for i, vertex in enumerate(vertices):
-    qs = labels[vertex]["quantSize"]
     p = points[vertex]
     pl = None
     pr = None
@@ -61,30 +62,30 @@ for i, vertex in enumerate(vertices):
         pl = points[vertices[i - 1]]
         slope = (p[1] - pl[1]) / (p[0] - pl[0])
     minCost = dist[vertex] - slope * bitlen[vertex]
-    hull_parameters["qs"].append(qs)
-    hull_parameters["lambda"].append(-slope)
+    lambdas[vertex] = -slope
     print(str(points[vertex]) + ":  " + str(labels[vertex]))
-    print("Lambda: " + str(-slope))
-    print("Min. Costs: " + str(minCost))
+    print("  Lambda: " + str(-slope))
+    print("  Min. Costs: " + str(minCost))
 
-z = np.polyfit(hull_parameters["qs"], hull_parameters["lambda"], 2)
+qs_hull = list(np.array(qs)[vertices])
+lambda_hull = list(np.array(lambdas)[vertices])
+z = np.polyfit(qs_hull, lambda_hull, 2)
 quad_fit = np.poly1d(z)
 print("Lambda prediction from quantization stepsize:")
 print(quad_fit)
 print("Predicted Lambda values:")
-print([quad_fit(t) for t in hull_parameters["qs"]])
+print([quad_fit(t) for t in qs_hull])
 
-interpolate_lambda = np.vectorize(lambda qs: quad_fit(qs) if qs not in hull_parameters["qs"] else hull_parameters["lambda"][hull_parameters["qs"].index(qs)])
-stepsizes = np.array([t["quantSize"] for t in labels])
-costs = np.array(dist) + interpolate_lambda(stepsizes) * np.array(bitlen)
-minJ = np.array([costs[stepsizes == t].min() for t in stepsizes])
+interpolate_lambda = np.vectorize(lambda t: quad_fit(t) if t not in qs_hull else lambda_hull[qs_hull.index(t)])
+costs = np.array(dist) + interpolate_lambda(qs) * np.array(bitlen)
+minJ = np.array([costs[np.array(qs) == t].min() for t in qs])
 costs /= minJ
 
 for figMode in range(2):
     cats = np.ones(len(points))
     title = ""
     if figMode == 0:
-        cats = [t["quantSize"] for t in labels]
+        cats = qs
         title = "R-D-points for all compression modes grouped by quantization stepsize"
     elif figMode == 1:
         cats = costs
@@ -99,9 +100,7 @@ for figMode in range(2):
         if figMode == 0:
             continue
         p = points[vertex]
-        qs = labels[vertex]["quantSize"]
-        Lambda = hull_parameters["lambda"][hull_parameters["qs"].index(qs)]
-        m_orth = -1 / (-Lambda)
+        m_orth = -1 / (-lambdas[vertex])
         x_tickz = np.array([p[0] - 0.1, p[0] + 1.0])
         plt.plot(x_tickz, m_orth * (x_tickz - p[0]) + p[1], "g:")
     #plt.gca().set_yscale("log")
