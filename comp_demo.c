@@ -294,7 +294,7 @@ int main(int argc, char **argv)
   array_to_file("orig.bin", x, width * height);
 
   //open text file for output bitstream
-  FILE* fout = fopen("bitstream.txt", "a");
+  FILE* fout = fopen("bitstream.txt", "w");
 
   //estimate bit-depth and QP value
   int bitdepth = calcMaxBitdepth(x, width * height);
