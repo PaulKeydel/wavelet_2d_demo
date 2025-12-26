@@ -4,6 +4,7 @@ import struct
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from pylab import cm
 
 def collect_data(num_pixel: int) -> tuple[list, list, list, list]:
@@ -61,33 +62,40 @@ def plot_bins(width: int, height: int, save_as: str | None):
     resi_data = list(map(abs, resi_data))
 
     clip_x0 = 0
-    clip_x1 = width
+    clip_x1 = 256
     clip_y0 = 0
-    clip_y1 = height
-    img1 = make_2d_image(orig_data, width, height)[clip_y0:clip_y1, clip_x0:clip_x1]
-    img2 = make_2d_image(reco_data, width, height)[clip_y0:clip_y1, clip_x0:clip_x1]
+    clip_y1 = 256
+    img1 = make_2d_image(orig_data, width, height)
+    img2 = make_2d_image(reco_data, width, height)
     img3 = make_2d_image(resi_data, width, height, flip_scale=True)[clip_y0:clip_y1, clip_x0:clip_x1]
-    img4 = make_2d_image(coeff_data, width, height, flip_scale=True)[clip_y0:clip_y1, clip_x0:clip_x1]
+    img4 = make_2d_image(coeff_data, width, height, flip_scale=True)[clip_y0:((clip_y0 + clip_y1) // 2), clip_x0:((clip_x0 + clip_x1) // 2)]
 
     fig, axs = plt.subplots(2, 2, figsize=(8, 8))
 
     axs[0, 0].matshow(img1, cmap=cm.gray)
     axs[0, 0].set_title("Original")
-    axs[0, 0].xaxis.set_ticks([])
+    axs[0, 0].xaxis.set_ticks_position("bottom")
+    if clip_x0 != 0 or clip_x1 != width or clip_y0 != 0 or clip_y1 != height:
+        rect = patches.Rectangle((clip_x0, clip_y0), clip_x1 - clip_x0, clip_y1 - clip_y0, linewidth=1, edgecolor='r', facecolor='none')
+        axs[0, 0].add_patch(rect)
 
     axs[1, 0].matshow(img2, cmap=cm.gray)
     axs[1, 0].set_title("Reconstructed")
-    axs[1, 0].xaxis.set_ticks_position('bottom')
+    axs[1, 0].xaxis.set_ticks([])
+    axs[1, 0].yaxis.set_ticks([])
 
     axs[0, 1].matshow(img3, cmap=cm.gray)
     axs[0, 1].set_title("Residual (absolute values)")
     axs[0, 1].xaxis.set_ticks([])
     axs[0, 1].yaxis.set_ticks([])
+    if clip_x0 != 0 or clip_x1 != width or clip_y0 != 0 or clip_y1 != height:
+        rect = patches.Rectangle((clip_x0, clip_y0), (clip_x1 - clip_x0) // 2, (clip_y1 - clip_y0) // 2, linewidth=1, edgecolor='r', facecolor='none')
+        axs[0, 1].add_patch(rect)
 
     axs[1, 1].matshow(img4, cmap=cm.gray)
-    axs[1, 1].xaxis.set_ticks_position('bottom')
-    axs[1, 1].yaxis.set_ticks([])
     axs[1, 1].set_title("Transformed and quantized")
+    axs[1, 1].xaxis.set_ticks([])
+    axs[1, 1].yaxis.set_ticks([])
 
     txt = "Entropy original image: " + "{:.3f}".format(entr_orig) + "   /   entropy transformed image: " + "{:.3f}".format(entr_coeff)
     plt.figtext(0.5, 0.01, txt, wrap=True, horizontalalignment='center', fontsize=12)
