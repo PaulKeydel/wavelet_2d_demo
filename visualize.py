@@ -6,6 +6,21 @@ import math
 import matplotlib.pyplot as plt
 from pylab import cm
 
+def collect_data(num_pixel: int) -> tuple[list, list, list, list]:
+    orig_bytes = Path('orig.bin').read_bytes()
+    orig_data = list(struct.unpack('i'*num_pixel, orig_bytes))
+
+    reco_bytes = Path('reco.bin').read_bytes()
+    reco_data = list(struct.unpack('i'*num_pixel, reco_bytes))
+
+    coeff_bytes = Path('coeffs.bin').read_bytes()
+    coeff_data = list(struct.unpack('i'*num_pixel, coeff_bytes))
+
+    resi_bytes = Path('resi.bin').read_bytes()
+    resi_data = list(struct.unpack('i'*num_pixel, resi_bytes))
+
+    return orig_data, reco_data, resi_data, coeff_data
+
 def entropy(message):
     n_labels = len(message)
     if n_labels <= 1:
@@ -20,76 +35,75 @@ def entropy(message):
         ent -= i * math.log(i, 2)
     return ent
 
-def normalize_to_8bit(vec, reverse = False):
-    ptp_ = np.ptp(vec)
-    if (not reverse):
-        min_ = min(vec)
-        return [255 * (vec[i] - min_) / ptp_ for i in range(len(vec))]
+def make_2d_image(src: list, width: int, height: int, flip_scale = False) -> np.ndarray:
+    ptp = np.ptp(src)
+    scaled_8bit = []
+    if not flip_scale:
+        min_val = min(src)
+        scaled_8bit = [255 * (src[i] - min_val) / ptp for i in range(len(src))]
     else:
-        max_ = max(vec)
-        return [255 * (max_ - vec[i]) / ptp_ for i in range(len(vec))]
+        max_val = max(src)
+        scaled_8bit = [255 * (max_val - src[i]) / ptp for i in range(len(src))]
+    return np.reshape(scaled_8bit, (width, height))
 
-def plot_bins(width, height):
-    num_pixel = width * height
+def plot_bins(width: int, height: int, save_as: str | None):
+    orig_data, reco_data, resi_data, coeff_data = collect_data(width * height)
 
-    orig_bytes = Path('orig.bin').read_bytes()
-    orig_data = struct.unpack('i'*num_pixel, orig_bytes)
     print("  orig: max=" + str(max(orig_data)) + " min=" + str(min(orig_data)))
-    entr_orig = entropy(orig_data)
-    orig_data = normalize_to_8bit(orig_data)
-    orig_data = np.reshape(orig_data, (width,height))
-
-    reco_bytes = Path('reco.bin').read_bytes()
-    reco_data = struct.unpack('i'*num_pixel, reco_bytes)
     print("  reco: max=" + str(max(reco_data)) + " min=" + str(min(reco_data)))
-    reco_data = normalize_to_8bit(reco_data)
-    reco_data = np.reshape(reco_data, (width,height))
-
-    coeff_bytes = Path('coeffs.bin').read_bytes()
-    coeff_data = struct.unpack('i'*num_pixel, coeff_bytes)
-    print("  coeff: max=" + str(max(coeff_data)) + " min=" + str(min(coeff_data)))
-    entr_coeff = entropy(coeff_data)
-    coeff_data = normalize_to_8bit(list(map(abs, coeff_data)), reverse=True)
-    coeff_data = np.reshape(coeff_data, (width,height))
-
-    resi_bytes = Path('resi.bin').read_bytes()
-    resi_data = struct.unpack('i'*num_pixel, resi_bytes)
+    print("  coef: max=" + str(max(coeff_data)) + " min=" + str(min(coeff_data)))
     print("  resi: max=" + str(max(resi_data)) + " min=" + str(min(resi_data)))
-    resi_data = normalize_to_8bit(list(map(abs, resi_data)), reverse=True)
-    #print("  resi: max=" + str(max(resi_data)) + " min=" + str(min(resi_data)))
-    resi_data = np.reshape(resi_data, (width,height))
+
+    entr_orig = entropy(orig_data)
+    entr_coeff = entropy(coeff_data)
+
+    coeff_data = list(map(abs, coeff_data))
+    resi_data = list(map(abs, resi_data))
+
+    clip_x0 = 0
+    clip_x1 = width
+    clip_y0 = 0
+    clip_y1 = height
+    img1 = make_2d_image(orig_data, width, height)[clip_y0:clip_y1, clip_x0:clip_x1]
+    img2 = make_2d_image(reco_data, width, height)[clip_y0:clip_y1, clip_x0:clip_x1]
+    img3 = make_2d_image(resi_data, width, height, flip_scale=True)[clip_y0:clip_y1, clip_x0:clip_x1]
+    img4 = make_2d_image(coeff_data, width, height, flip_scale=True)[clip_y0:clip_y1, clip_x0:clip_x1]
 
     fig, axs = plt.subplots(2, 2, figsize=(8, 8))
 
-    axs[0, 0].matshow(orig_data, cmap=cm.gray)
-    axs[0, 0].set_title('Original')
+    axs[0, 0].matshow(img1, cmap=cm.gray)
+    axs[0, 0].set_title("Original")
     axs[0, 0].xaxis.set_ticks([])
 
-    axs[1, 0].matshow(reco_data, cmap=cm.gray)
-    axs[1, 0].set_title('Reconstructed')
+    axs[1, 0].matshow(img2, cmap=cm.gray)
+    axs[1, 0].set_title("Reconstructed")
     axs[1, 0].xaxis.set_ticks_position('bottom')
 
-    axs[0, 1].matshow(resi_data, cmap=cm.gray)
-    axs[0, 1].set_title('Residual (absolute values)')
+    axs[0, 1].matshow(img3, cmap=cm.gray)
+    axs[0, 1].set_title("Residual (absolute values)")
     axs[0, 1].xaxis.set_ticks([])
     axs[0, 1].yaxis.set_ticks([])
 
-    axs[1, 1].matshow(coeff_data, cmap=cm.gray)
+    axs[1, 1].matshow(img4, cmap=cm.gray)
     axs[1, 1].xaxis.set_ticks_position('bottom')
     axs[1, 1].yaxis.set_ticks([])
-    axs[1, 1].set_title('Transformed and quantized')
+    axs[1, 1].set_title("Transformed and quantized")
 
     txt = "Entropy original image: " + "{:.3f}".format(entr_orig) + "   /   entropy transformed image: " + "{:.3f}".format(entr_coeff)
     plt.figtext(0.5, 0.01, txt, wrap=True, horizontalalignment='center', fontsize=12)
+
+    if save_as is None:
+        plt.show()
+    else:
+        assert(save_as.endswith(".svg"))
+        fig.savefig(save_as, format="svg", bbox_inches="tight")
 
 if __name__ == "__main__":
     assert(len(sys.argv) == 3 or len(sys.argv) == 4)
     width = int(sys.argv[1])
     height = int(sys.argv[2])
 
-    plot_bins(width=width, height=height)
-
     if (len(sys.argv) == 3):
-        plt.show()
+        plot_bins(width, height, save_as=None)
     else:
-        plt.savefig(sys.argv[3], format="svg", bbox_inches="tight")
+        plot_bins(width, height, save_as=sys.argv[3])

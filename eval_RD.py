@@ -2,7 +2,6 @@
 
 import sys
 import subprocess
-import matplotlib.figure as mplfig
 import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
 import numpy as np
@@ -85,7 +84,7 @@ def interpolate_lambda(vertices: np.ndarray, qs: np.ndarray, slopes: np.ndarray)
     print([quad_fit(t) for t in qs_hull])
     return lambda_vec(qs)
 
-def plot_RD(save_as: str | None) -> mplfig.Figure:
+def plot_RD(save_as: str | None):
     bitlen, dist, qs, labels = collect_data()
     points = np.column_stack((bitlen, dist))
     vertices, simplices = get_conv_hull(points, qs)
