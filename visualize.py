@@ -47,7 +47,7 @@ def make_2d_image(src: list, width: int, height: int, flip_scale = False) -> np.
         scaled_8bit = [255 * (max_val - src[i]) / ptp for i in range(len(src))]
     return np.reshape(scaled_8bit, (width, height))
 
-def plot_bins(width: int, height: int, save_as: str | None):
+def plot_bins(width: int, height: int, save_as: str = ""):
     orig_data, reco_data, resi_data, coeff_data = collect_data(width * height)
 
     print("  orig: max=" + str(max(orig_data)) + " min=" + str(min(orig_data)))
@@ -100,7 +100,7 @@ def plot_bins(width: int, height: int, save_as: str | None):
     txt = "Entropy original image: " + "{:.3f}".format(entr_orig) + "   /   entropy transformed image: " + "{:.3f}".format(entr_coeff)
     plt.figtext(0.5, 0.01, txt, wrap=True, horizontalalignment='center', fontsize=12)
 
-    if save_as is None:
+    if save_as == "":
         plt.show()
     else:
         assert(save_as.endswith(".svg"))
@@ -112,6 +112,6 @@ if __name__ == "__main__":
     height = int(sys.argv[2])
 
     if (len(sys.argv) == 3):
-        plot_bins(width, height, save_as=None)
+        plot_bins(width, height)
     else:
         plot_bins(width, height, save_as=sys.argv[3])
