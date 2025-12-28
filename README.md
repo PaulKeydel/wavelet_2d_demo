@@ -12,14 +12,14 @@ First, the original image is splitted into blocks of same size (biggest block si
 
 
 ***Example: The effect of partitioning***
-![Compression demo blk-128](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/demo_partdepth1.svg)
+![Compression demo blk-128](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/demo_camera_pred4_qs8_depth1.svg)
 
-![Compression demo blk-32](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/demo_partdepth3.svg)
+![Compression demo blk-32](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/demo_camera_pred4_qs8_depth3.svg)
 
 ***Example: The effect of quantization***
-![Compression demo qp-3](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/demo_stepsize8.svg)
+![Compression demo qp-3](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/demo_astronaut_pred4_qs8_depth3.svg)
 
-![Compression demo qp-5](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/demo_stepsize32.svg)
+![Compression demo qp-5](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/demo_astronaut_pred4_qs32_depth3.svg)
 
 **How to use this project?**
 

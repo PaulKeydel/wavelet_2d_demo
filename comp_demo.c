@@ -21,7 +21,7 @@ int clipLR(int val, int bitdepth, int shift)
   return val;
 }
 
-void predict(int predMode, int* reco, int* dst, int width, int height, int stride, bool hasLeft, bool hasTop, int bitdepth)
+void predict(int predMode, int* reco, int* dst, int* resi, int width, int height, int stride, bool hasLeft, bool hasTop, int bitdepth)
 {
   int defaultPred = 1 << (bitdepth - 1);
   for (int rowidx = 0; rowidx < height; rowidx++)
@@ -45,10 +45,15 @@ void predict(int predMode, int* reco, int* dst, int width, int height, int strid
       {
         pred = (hasLeft && hasTop) ? ((reco[colidx - stride] + reco[rowidx * stride - 1]) >> 1) : defaultPred;
       }
-      //subtract or add prediction value
+      //store prediction signal
       if (dst != NULL)
       {
-        dst[rowidx * stride + colidx] = clipLR(dst[rowidx * stride + colidx] - pred, bitdepth + 1 , bitdepth);
+        dst[rowidx * stride + colidx] = pred;
+      }
+      //subtract or add prediction value
+      if (resi != NULL)
+      {
+        resi[rowidx * stride + colidx] = clipLR(resi[rowidx * stride + colidx] - pred, bitdepth + 1 , bitdepth);
       }
       else
       {
@@ -285,6 +290,7 @@ int main(int argc, char **argv)
   int quantSize = atoi(argv[5]);
   int partDepth = atoi(argv[6]);
   int* x        = (int*)malloc(width * height * sizeof(int));
+  int* pred     = (int*)malloc(width * height * sizeof(int));
   int* resi     = (int*)malloc(width * height * sizeof(int));
   int* trafo    = (int*)malloc(width * height * sizeof(int));
   int* reco     = (int*)malloc(width * height * sizeof(int));
@@ -335,12 +341,13 @@ int main(int argc, char **argv)
 
     int offset = (subblk / blkStride) * blkHeight * width + (subblk % blkStride) * blkWidth;
     int* currOrig = x + offset;
+    int* currPred = pred + offset;
     int* currResi = resi + offset;
     int* currTrafo = trafo + offset;
     int* currReco = reco + offset;
     //compression: prediction, 9/7 transformtion and quatization
     blkcpy(currOrig, currResi, blkWidth, blkHeight, width);
-    predict(blkMode, currReco, currResi, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
+    predict(blkMode, currReco, currPred, currResi, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
     blkcpy(currResi, currTrafo, blkWidth, blkHeight, width);
     transform(currTrafo, blkWidth, blkHeight, width);
     quantize(currTrafo, blkWidth, blkHeight, width, bitdepth, quantSize);
@@ -349,10 +356,11 @@ int main(int argc, char **argv)
     //decompression
     dequantize(currReco, blkWidth, blkHeight, width, quantSize);
     inv_transform(currReco, blkWidth, blkHeight, width);
-    predict(blkMode, currReco, NULL, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
+    predict(blkMode, currReco, NULL, NULL, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
     dist += mse_dist(currOrig, currReco, blkWidth, blkHeight, width);
   }
   //safe everything to files
+  array_to_file("pred.bin", pred, width * height);
   array_to_file("resi.bin", resi, width * height);
   array_to_file("coeffs.bin", trafo, width * height);
   array_to_file("reco.bin", reco, width * height);
@@ -363,6 +371,7 @@ int main(int argc, char **argv)
 
   fclose(fout);
   free(x);
+  free(pred);
   free(resi);
   free(trafo);
   free(reco);
