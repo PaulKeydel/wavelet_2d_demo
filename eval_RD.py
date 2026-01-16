@@ -103,9 +103,9 @@ def plot_RD(save_as: str | None):
         elif figMode == 1:
             cats = costs
             title = "Increasing R-D-costs (J = D + λR) orthogonal to the optimal RD-curve"
-        fig = plt.figure()
+        fig = plt.figure(figsize=(10, 6))
         plt.scatter(bitlen, dist, c=cats, cmap="viridis_r")
-        plt.xlim(-1.5, None)
+        plt.xlim(-1.8, None)
         for simplex in simplices:
             plt.plot(points[simplex, 0], points[simplex, 1], "k-")
         for vertex in vertices:
@@ -123,6 +123,7 @@ def plot_RD(save_as: str | None):
         plt.title(title)
 
         if (save_as is None):
+            plt.tight_layout()
             plt.show()
         else:
             fig.set_size_inches(15, 9)
