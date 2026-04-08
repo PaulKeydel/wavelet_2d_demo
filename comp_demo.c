@@ -183,7 +183,7 @@ void dequantize(int* src, int width, int height, int stride, int quantsize)
   }
 }
 
-unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth, int Qp, FILE* fptr)
+unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth, int Qp)
 {
   unsigned long bits = 0UL;
 #if LL_FIXED_LENGTH
@@ -209,20 +209,6 @@ unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth
         }
         unsigned bitsCurr = (unsigned)(abs(x[rowidx * stride + colidx]) + 1 + abs(signFlag));
         bits += (unsigned long) bitsCurr;
-
-        char* bitsOut = malloc(bitsCurr);
-        if (signFlag == 0)
-        {
-          bitsOut[0] = '0';
-        }
-        else
-        {
-          memset(bitsOut, '1', bitsCurr - 2);
-          bitsOut[bitsCurr - 2] = '0';
-          bitsOut[bitsCurr - 1] = signFlag < 0 ? '0' : '1';
-        }
-        fprintf(fptr, "%s\n", (const char*)bitsOut);
-        free(bitsOut);
       }
     }
   }
@@ -240,6 +226,59 @@ unsigned long mse_dist(int* src, int* reco, int width, int height, int stride)
     }
   }
   return dist;
+}
+
+void encode_fixlen8(int* x, int width, int height, int stride, const char* encfile)
+{
+  FILE* fptr = fopen(encfile, "w");
+  char* bitsOut = malloc(8);
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      memset(bitsOut, '0', 8);
+      int n = x[rowidx * stride + colidx];
+      int i = 0;
+      assert(n < 256);
+      while (n > 0)
+      {
+        bitsOut[7 - i] = (n % 2) + '0';
+        n = n / 2;
+        i++;
+      }
+      fprintf(fptr, "%s\n", (const char*)bitsOut);
+    }
+  }
+  free(bitsOut);
+  fclose(fptr);
+}
+
+void encode_huffman(int* x, int width, int height, int stride, const char* encfile)
+{
+  FILE* fptr = fopen(encfile, "w");
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      int n = x[rowidx * stride + colidx];
+      unsigned bitlen = (unsigned)(abs(n) + 1 + (n != 0));
+
+      char* bitsOut = malloc(bitlen);
+      if (n == 0)
+      {
+        bitsOut[0] = '0';
+      }
+      else
+      {
+        memset(bitsOut, '1', bitlen - 2);
+        bitsOut[bitlen - 2] = '0';
+        bitsOut[bitlen - 1] = n < 0 ? '0' : '1';
+      }
+      fprintf(fptr, "%s\n", (const char*)bitsOut);
+      free(bitsOut);
+    }
+  }
+  fclose(fptr);
 }
 
 void array_to_file(const char* fname, int* data, int len)
@@ -299,9 +338,6 @@ int main(int argc, char **argv)
   array_from_file(argv[1], x, width * height);
   array_to_file("orig.bin", x, width * height);
 
-  //open text file for output bitstream
-  FILE* fout = fopen("bitstream.txt", "w");
-
   //estimate bit-depth and QP value
   int bitdepth = calcMaxBitdepth(x, width * height);
   int QP       = calcBitdepth(quantSize - 1);
@@ -351,7 +387,7 @@ int main(int argc, char **argv)
     blkcpy(currResi, currTrafo, blkWidth, blkHeight, width);
     transform(currTrafo, blkWidth, blkHeight, width);
     quantize(currTrafo, blkWidth, blkHeight, width, bitdepth, quantSize);
-    bits += coded_bits(currTrafo, blkWidth, blkHeight, width, bitdepth, QP, fout);
+    bits += coded_bits(currTrafo, blkWidth, blkHeight, width, bitdepth, QP);
     blkcpy(currTrafo, currReco, blkWidth, blkHeight, width);
     //decompression
     dequantize(currReco, blkWidth, blkHeight, width, quantSize);
@@ -365,11 +401,14 @@ int main(int argc, char **argv)
   array_to_file("coeffs.bin", trafo, width * height);
   array_to_file("reco.bin", reco, width * height);
 
+  //encoding
+  encode_huffman(trafo, width, height, width, "enc_comp.txt");
+  encode_fixlen8(x, width, height, width, "enc_orig.txt");
+
   printf("Relative distortion (MSE): %f\n", (double)dist / (double)(width * height));
   printf("Average symbol length (Bits): %f\n", (double)bits / (double)(width * height));
   printf("Compression rate: %f\n", 1.0 - (double)bits / (double)(bitdepth * width * height));
 
-  fclose(fout);
   free(x);
   free(pred);
   free(resi);
