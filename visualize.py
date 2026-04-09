@@ -121,7 +121,7 @@ class DemoSteps:
         print("  resi: max=" + str(np.max(resi)) + " min=" + str(np.min(resi)))
 
         entr_orig = calc_entropy(orig)
-        entr_coeff = calc_entropy(np.abs(coeff))
+        entr_coeff = calc_entropy(coeff)
 
         gridsize = 2 ** (8 - splitLevel)
         clip_x0 = 0
@@ -459,16 +459,15 @@ if __name__ == "__main__":
     if not os.path.exists(img_path):
         os.makedirs(img_path)
     img_path += "/"
-    img_path = ""
 
     svg_steps_exp1 = img_path + "demo_astronaut_pred4_qs8_depth3.svg"
     svg_steps_exp2 = img_path + "demo_astronaut_pred4_qs32_depth3.svg"
     svg_steps_exp3 = img_path + "demo_camera_pred4_qs8_depth2.svg"
     svg_steps_exp4 = img_path + "demo_camera_pred4_qs8_depth5.svg"
-    svg_prediction = img_path + ""
-    svg_transform  = img_path + ""
-    svg_encoding   = img_path + ""
-    svg_lagrange   = img_path + "RD_demo.svg"
+    svg_prediction = img_path + "demo_prediction.svg"
+    svg_transform  = img_path + "demo_transform.svg"
+    svg_encoding   = img_path + "demo_encoding.svg"
+    svg_lagrange   = img_path + "demo_RD.svg"
     DemoSteps.visualize("astronaut.bin", 512, 512, predMode=4, quantSize=8, splitLevel=3, save_as=svg_steps_exp1)
     DemoSteps.visualize("astronaut.bin", 512, 512, predMode=4, quantSize=32, splitLevel=3, save_as=svg_steps_exp2)
     DemoSteps.visualize("camera.bin", 512, 512, predMode=4, quantSize=8, splitLevel=2, save_as=svg_steps_exp3)
