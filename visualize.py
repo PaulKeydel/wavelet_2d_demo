@@ -256,67 +256,59 @@ class DemoTrafo:
         t = np.linspace(0, 1, 500, endpoint=False)  # Time vector
         signal = 10 * (np.sin(2 * np.pi * 10 * t) + np.sin(2 * np.pi * 50 * t * t))  # Signal
 
+        #perform 1-Level DWT decomposition using Haar wavelet
+        cA1, cD1 = pywt.wavedec(signal, 'haar', level=1)
         #perform 3-Level DWT decomposition using Haar wavelet
-        cA3, cD3, cD2, cD1 = pywt.wavedec(signal, 'haar', level=3)
+        #cA3, cD3, cD2, cD1 = pywt.wavedec(signal, 'haar', level=3)
 
         #quantization with stepsize qs
-        qs = 8
-        qcA3 = np.round(cA3 / qs)
-        qcD3 = np.round(cD3 / qs)
-        qcD2 = np.round(cD2 / qs)
-        qcD1 = np.round(cD1 / qs)
+        qs = 12
+        qcA1 = qs * np.round(cA1 / qs)
+        qcD1 = qs * np.round(cD1 / qs)
 
         #perform DWT reconstruction for quantized and non-quantized coeffs
-        reco_orig = pywt.waverec([cA3, cD3, cD2, cD1], wavelet='haar')
-        reco_quant = pywt.waverec([qs * qcA3, qs * qcD3, qs * qcD2, qs * qcD1], wavelet='haar')
+        reco_orig = pywt.waverec([cA1, cD1], wavelet='haar')
+        #reco_orig = pywt.waverec([cA3, cD3, cD2, cD1], wavelet='haar')
+        reco_quant = pywt.waverec([qcA1, qcD1], wavelet='haar')
 
         #plot the original signal and the decomposition results
-        fig = plt.figure(figsize=(10, 10))
-        c0 = "#7f7f7f"
+        fig, axs = plt.subplots(5, 1, figsize=(10, 10), layout='constrained')
+        c0 = "#006633"
         c1 = "#1f77b4"
         c2 = "#ff7f0e"
 
         #plot the original signal
-        plt.subplot(6, 1, 1)
-        plt.plot(t, signal, color=c0)
-        plt.title("Original Signal")
-        plt.xlabel("Time (s)")
-        plt.ylabel("Amplitude")
+        axs[0].plot(t, signal, label="Original", color=c0)
+        axs[0].set_title("Original Signal")
+        axs[0].set_xlabel("Time (s)")
+        axs[0].set_ylabel("Amplitude")
 
-        #plot the approximation coefficients at level 3
-        plt.subplot(6, 1, 2)
-        plt.plot(cA3, color=c1)
-        plt.plot(qcA3, color=c2)
-        plt.title("DWT: Approximation Coefficients at Level 3")
-
-        #plot the detail coefficients at level 3
-        plt.subplot(6, 1, 3)
-        plt.plot(cD3, color=c1)
-        plt.plot(qcD3, color=c2)
-        plt.title("DWT: Detail Coefficients at Level 3")
-
-        #plot the detail coefficients at level 2
-        plt.subplot(6, 1, 4)
-        plt.plot(cD2, color=c1)
-        plt.plot(qcD2, color=c2)
-        plt.title("DWT: Detail Coefficients at Level 2")
+        #plot the approximation coefficients at level 1
+        axs[1].plot(cA1, label="non-quantized", color=c1)
+        axs[1].plot(qcA1, label="quantized", color=c2)
+        axs[1].set_title("DWT: Approximation Coefficients at Level 1")
 
         #plot the detail coefficients at level 1
-        plt.subplot(6, 1, 5)
-        plt.plot(cD1, color=c1)
-        plt.plot(qcD1, color=c2)
-        plt.title("DWT: Detail Coefficients at Level 1")
+        axs[2].plot(cD1, color=c1)
+        axs[2].plot(qcD1, color=c2)
+        axs[2].set_title("DWT: Detail Coefficients at Level 1")
 
-        #plot the reconstructed signal
-        plt.subplot(6, 1, 6)
-        plt.plot(t, reco_orig, color=c1)
-        plt.plot(t, reco_quant, color=c2)
-        plt.title("Reconstructed Signal")
-        plt.xlabel("Time (s)")
-        plt.ylabel("Amplitude")
-        plt.legend(["non-quantized", "quantized"], bbox_to_anchor=(1, -0.8), ncol=2)
+        #plot signal reconstruction
+        axs[3].plot(t, signal, linewidth=1.5, linestyle='dashed', color=c0)
+        axs[3].plot(t, reco_orig, linewidth=1.0, color=c1)
+        axs[3].set_title("Signal reconstruction")
+        axs[3].set_xlabel("Time (s)")
+        axs[3].set_ylabel("Amplitude")
 
-        plt.tight_layout()
+        #plot quantized reconstruction
+        axs[4].plot(t, signal, linewidth=1.5, linestyle='dashed', color=c0)
+        axs[4].plot(t, reco_quant, linewidth=1.0, color=c2)
+        axs[4].set_title("Quantized reconstruction")
+        axs[4].set_xlabel("Time (s)")
+        axs[4].set_ylabel("Amplitude")
+
+        fig.legend(loc='outside right lower')
+
         if save_as == "":
             plt.show()
         else:
