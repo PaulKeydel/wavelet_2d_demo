@@ -5,9 +5,9 @@ import struct
 import numpy as np
 import math
 import matplotlib.pyplot as plt
-from scipy.spatial import ConvexHull
 import pywt
 from pylab import cm
+from eval_RD import RDeval
 
 def run_compression(binImg: str, width: int, height: int, predMode: int, quantSize: int, splitLevel: int) -> tuple[float, float]:
     command = "./comp_demo " + binImg + " " + str(width) + " " + str(height) + " " + str(predMode) + " " + str(quantSize) + " " + str(splitLevel)
@@ -318,114 +318,36 @@ class DemoTrafo:
 
 
 class DemoRD:
-    @classmethod
-    def _collect_data(cls, binImg: str, width: int, height: int, ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list]:
-        dist = list()
-        bitlen = list()
-        qs = list()
-        labels = list()
-        for predMode in range(0, 5):
-            for quantSize in range(8, 65, 8):
-                for splitLevel in range(2, 6):
-                    dist_val, bitlen_val = run_compression(binImg, width, height, predMode, quantSize, splitLevel)
-                    #to make the figure looking nicer, remove higher bitrates
-                    if bitlen_val <= 5:
-                        dist.append(dist_val)
-                        bitlen.append(bitlen_val)
-                        qs.append(quantSize)
-                        labels.append({"predMode": predMode, "quantSize": quantSize, "splitLevel": splitLevel})
-        return np.array(bitlen), np.array(dist), np.array(qs), labels
-
-    @classmethod
-    def _get_conv_hull(cls, points: np.ndarray, qs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        hull = ConvexHull(points)
-        simplices = list()
-        vertices = list()
-        for simplex in hull.simplices[1:]:
-            p0 = [points[simplex, 0][0], points[simplex, 1][0]]
-            p1 = [points[simplex, 0][1], points[simplex, 1][1]]
-            slope = (p1[1] - p0[1]) / (p1[0] - p0[0])
-            if (slope <= -10) and (slope > -100000):
-                vertex0 = np.where(points == p0)[0][0]
-                vertex1 = np.where(points == p1)[0][0]
-                simplices.append(simplex)
-                vertices = list(set(vertices + [vertex0, vertex1]))
-        assert(len(vertices) - 1 == len(simplices))
-        vertices = sorted(vertices, key=lambda x: qs[x])
-        return np.array(vertices), np.array(simplices)
-
-    @classmethod
-    def _calc_slopes(cls, points: np.ndarray, vertices: np.ndarray) -> np.ndarray:
-        slopes = np.empty(len(points))
-        slopes.fill(np.nan)
-        for i, vertex in enumerate(vertices):
-            p = points[vertex]
-            pl = None
-            pr = None
-            slope = None
-            if (i > 0) and (i < len(vertices) - 1):
-                pl = points[vertices[i - 1]]
-                pr = points[vertices[i + 1]]
-                slope = (pr[1] - pl[1]) / (pr[0] - pl[0])
-            elif i == 0:
-                pr = points[vertices[i + 1]]
-                slope = (pr[1] - p[1]) / (pr[0] - p[0])
-            elif i == len(vertices) - 1:
-                pl = points[vertices[i - 1]]
-                slope = (p[1] - pl[1]) / (p[0] - pl[0])
-            slopes[vertex] = slope
-            minCost = points[vertex, 1] - slope * points[vertex, 0]
-            print("V" + str(i) + " : " + str(points[vertex]))
-            print("  Lambda: " + str(-slope))
-            print("  Min. Costs: " + str(minCost))
-        return slopes
-
-    @classmethod
-    def _interpolate_lambda(cls, vertices: np.ndarray, qs: np.ndarray, slopes: np.ndarray) -> np.ndarray:
-        qs_hull = list(qs[vertices])
-        lambda_hull = list(-(slopes[vertices]))
-        z = np.polyfit(qs_hull, lambda_hull, 2)
-        quad_fit = np.poly1d(z)
-        lambda_vec = np.vectorize(lambda t: quad_fit(t))
-        print("Lambda prediction from quantization stepsize:")
-        print(quad_fit)
-        print("Predicted Lambda values:")
-        print([quad_fit(t) for t in qs_hull])
-        return lambda_vec(qs)
-
-    @classmethod
-    def visualize(cls, binImg: str, width: int, height: int, save_as: str = ""):
+    @staticmethod
+    def visualize(binImg: str, width: int, height: int, save_as: str = ""):
         #close current opened plot window
         plt.close()
 
-        bitlen, dist, qs, labels = cls._collect_data(binImg, width, height)
-        points = np.column_stack((bitlen, dist))
-        vertices, simplices = cls._get_conv_hull(points, qs)
-        slopes = cls._calc_slopes(points, vertices)
-        lambdas = cls._interpolate_lambda(vertices, qs, slopes)
-        costs = dist + lambdas * bitlen
-        minJ = np.array([costs[qs == t].min() for t in qs])
-        costs /= minJ
+        rd = RDeval(binImg, width, height)
+        vertices, simplices = rd.get_conv_hull()
+        slopes = rd.calc_slopes(vertices)
+        lambdas, quad_fit = rd.interpolate_lambda(vertices, slopes)
+        costs = rd.calc_costs(lambdas)
 
         for figMode in range(2):
-            cats = np.ones(len(points))
+            cats = np.ones(len(rd.points))
             title = ""
             if figMode == 0:
-                cats = qs
+                cats = rd.qs
                 title = "R-D-points for all compression modes grouped by quantization stepsize"
             elif figMode == 1:
                 cats = costs
                 title = "Increasing R-D-costs (J = D + λR) orthogonal to the optimal RD-curve"
             fig = plt.figure(figsize=(10, 6))
-            plt.scatter(bitlen, dist, c=cats, cmap="viridis_r")
+            plt.scatter(rd.bitlen, rd.dist, c=cats, cmap="viridis_r")
             plt.xlim(-1.8, None)
             for simplex in simplices:
-                plt.plot(points[simplex, 0], points[simplex, 1], "k-")
+                plt.plot(rd.points[simplex, 0], rd.points[simplex, 1], "k-")
             for vertex in vertices:
-                plt.text(points[vertex, 0] - 0.1, points[vertex, 1], str(labels[vertex]), horizontalalignment="right")
+                plt.text(rd.points[vertex, 0] - 0.1, rd.points[vertex, 1], str(rd.labels[vertex]), horizontalalignment="right")
                 if figMode == 0:
                     continue
-                p = points[vertex]
+                p = rd.points[vertex]
                 m_orth = -1 / slopes[vertex]
                 x_tickz = np.array([p[0] - 0.1, p[0] + 1.0])
                 plt.plot(x_tickz, m_orth * (x_tickz - p[0]) + p[1], "g:")

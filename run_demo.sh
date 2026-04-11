@@ -7,15 +7,19 @@ fi
 
 make
 
-read -p "Only start the Jupyter demo notebook? [y/n] " -n 1 choice
+read -p "Start Jupyter demo (j) OR generate visuals (v) OR evaluate costs (c)? [j/v/c] " -n 1 choice
 echo
-if [ "$choice" = "y" ]; then 
+if [ "$choice" = "j" ]; then 
     echo "Running Jupyter..."
     jupyter-notebook visualize_nb.ipynb
-elif [ "$choice" = "n" ]; then
+elif [ "$choice" = "v" ]; then
     #visualize intra-coding (i.e. prediction, transformation, quantization) and RD-optimization
     echo "Create SVG image files..."
     python3 visualize.py
+elif [ "$choice" = "c" ]; then
+    #print summary of RD analysis
+    echo "Display summary..."
+    ./eval_RD.py
 else
     echo "Invalid choice!"
 fi
