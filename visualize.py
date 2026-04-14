@@ -286,24 +286,24 @@ class DemoTrafo:
         #plot the approximation coefficients at level 1
         axs[1].plot(cA1, label="non-quantized", color=c1)
         axs[1].plot(qcA1, label="quantized", color=c2)
-        axs[1].set_title("DWT: Approximation Coefficients at Level 1")
+        axs[1].set_title("DWT: Approximation coefficients in subspace V")
 
         #plot the detail coefficients at level 1
         axs[2].plot(cD1, color=c1)
         axs[2].plot(qcD1, color=c2)
-        axs[2].set_title("DWT: Detail Coefficients at Level 1")
+        axs[2].set_title("DWT: Detail coefficients in subspace W")
 
         #plot signal reconstruction
         axs[3].plot(t, signal, linewidth=1.5, linestyle='dashed', color=c0)
         axs[3].plot(t, reco_orig, linewidth=1.0, color=c1)
-        axs[3].set_title("Signal reconstruction")
+        axs[3].set_title("Signal reconstruction vs. Original")
         axs[3].set_xlabel("Time (s)")
         axs[3].set_ylabel("Amplitude")
 
         #plot quantized reconstruction
         axs[4].plot(t, signal, linewidth=1.5, linestyle='dashed', color=c0)
         axs[4].plot(t, reco_quant, linewidth=1.0, color=c2)
-        axs[4].set_title("Quantized reconstruction")
+        axs[4].set_title("Quantized reconstruction vs. Original")
         axs[4].set_xlabel("Time (s)")
         axs[4].set_ylabel("Amplitude")
 
