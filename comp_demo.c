@@ -10,15 +10,29 @@
 #define MAX_BLOCK_SIZE  256
 #define LL_FIXED_LENGTH 0
 
-int clipLR(int val, int bitdepth, int shift)
+int clipLR(int val, int min, int max)
 {
-  assert(shift < bitdepth);
-  int min = 0;
-  int max = (1 << bitdepth) - 1;
-  int shift_val = (1 << shift) - 1;
-  if (val + shift_val < min) return min - shift_val;
-  if (val + shift_val > max) return max - shift_val;
+  if (val > max)
+  {
+    return max;
+  }
+  if (val < min)
+  {
+    return min;
+  }
   return val;
+}
+
+int calcBitdepth(int* x, int n)
+{
+  int max = 0;
+  int min = 0;
+  for (int i = 0; i < n; i++)
+  {
+    if (x[i] > max) max = x[i];
+    if (x[i] < min) min = x[i];
+  }
+  return (int)floor(log2((double)(max - min))) + 1;
 }
 
 void predict(int predMode, int* reco, int* dst, int* resi, int width, int height, int stride, bool hasLeft, bool hasTop, int bitdepth)
@@ -53,17 +67,17 @@ void predict(int predMode, int* reco, int* dst, int* resi, int width, int height
       //subtract or add prediction value
       if (resi != NULL)
       {
-        resi[rowidx * stride + colidx] = clipLR(resi[rowidx * stride + colidx] - pred, bitdepth + 1 , bitdepth);
+        resi[rowidx * stride + colidx] = clipLR(resi[rowidx * stride + colidx] - pred, -(1 << bitdepth) + 1, (1 << bitdepth) - 1);
       }
       else
       {
-        reco[rowidx * stride + colidx] = clipLR(reco[rowidx * stride + colidx] + pred, bitdepth, 0);
+        reco[rowidx * stride + colidx] = clipLR(reco[rowidx * stride + colidx] + pred, 0, (1 << bitdepth) - 1);
       }
     }
   }
 }
 
-void transform(int* src, int width, int height, int stride)
+void transform(int* src, int width, int height, int stride, int bitdepthIn)
 {
 #if !USE_TAUBMANN
   //filter set sqrt(2):sqrt(2) normalization
@@ -88,20 +102,24 @@ void transform(int* src, int width, int height, int stride)
   }
 #if USE_TAUBMANN
   convWT_2d(h_ana, 9, g_ana, 7, dsrc, width, height, width);
+  int clipMin = -(1 << (bitdepthIn - 1)) + 1;
+  int clipMax = (1 << (bitdepthIn - 1)) - 1;
 #else
   lwt97_2d(dsrc, width, height, width);
+  int clipMin = -(1 << bitdepthIn) + 1;
+  int clipMax = (1 << bitdepthIn) - 1;
 #endif
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      src[rowidx * stride + colidx] = (int)round(dsrc[rowidx * width + colidx]);
+      src[rowidx * stride + colidx] = clipLR((int)round(dsrc[rowidx * width + colidx]), clipMin, clipMax);
     }
   }
   free(dsrc);
 }
 
-void inv_transform(int* src, int width, int height, int stride)
+void inv_transform(int* src, int width, int height, int stride, int bitdepthOut)
 {
 #if !USE_TAUBMANN
   //filter set sqrt(2):sqrt(2) normalization
@@ -129,45 +147,26 @@ void inv_transform(int* src, int width, int height, int stride)
 #else
   ilwt97_2d(dsrc, width, height, width);
 #endif
+  int clipMin = -(1 << (bitdepthOut - 1)) + 1;
+  int clipMax = (1 << (bitdepthOut - 1)) - 1;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      src[rowidx * stride + colidx] = (int)round(dsrc[rowidx * width + colidx]);
+      src[rowidx * stride + colidx] = clipLR((int)round(dsrc[rowidx * width + colidx]), clipMin, clipMax);
     }
   }
   free(dsrc);
 }
 
-int calcBitdepth(int x)
+void quantize(int* src, int width, int height, int stride, int quantsize)
 {
-  return (int)ceil(round(1000 * log2((double)x + 1.0)) / 1000);
-}
-
-int calcMaxBitdepth(int* x, int n)
-{
-  int max = abs(x[0]);
-  for (int i = 0; i < n; i++)
-  {
-    if (abs(x[i]) > max) max = abs(x[i]);
-  }
-  return calcBitdepth(max);
-}
-
-void quantize(int* src, int width, int height, int stride, int bitdepth, int quantsize)
-{
-  int Qp = calcBitdepth(quantsize - 1);
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
       int sgn = src[rowidx * stride + colidx] < 0 ? -1 : 1;
       src[rowidx * stride + colidx] = sgn * (abs(src[rowidx * stride + colidx]) / quantsize);
-#if USE_TAUBMANN
-      src[rowidx * stride + colidx] = clipLR(src[rowidx * stride + colidx], bitdepth + 1 - Qp, bitdepth - Qp);
-#else
-      src[rowidx * stride + colidx] = clipLR(src[rowidx * stride + colidx], bitdepth + 2 - Qp, bitdepth + 1 - Qp);
-#endif
     }
   }
 }
@@ -187,12 +186,8 @@ unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth
 {
   unsigned long bits = 0UL;
 #if LL_FIXED_LENGTH
-#if USE_TAUBMANN
-  int trafoBD = bitdepth + 1 - Qp;
-#else
-  int trafoBD = bitdepth + 2 - Qp;
-#endif
   //fixed length coding for the LL band
+  int trafoBD = bitdepth + 2 - Qp;
   bits = (height / 2) * (width / 2) * (unsigned long)trafoBD;
 #endif
   //Huffman coding depending on LL_FIXED_LENGTH: all four subbands or the three details bands only
@@ -326,12 +321,13 @@ int main(int argc, char **argv)
   int width     = atoi(argv[2]);
   int height    = atoi(argv[3]);
   int predMode  = atoi(argv[4]);
-  int quantSize = atoi(argv[5]);
+  int stepSize  = atoi(argv[5]);
   int partDepth = atoi(argv[6]);
   int* x        = (int*)malloc(width * height * sizeof(int));
   int* pred     = (int*)malloc(width * height * sizeof(int));
   int* resi     = (int*)malloc(width * height * sizeof(int));
   int* trafo    = (int*)malloc(width * height * sizeof(int));
+  int* quant    = (int*)malloc(width * height * sizeof(int));
   int* reco     = (int*)malloc(width * height * sizeof(int));
 
   //load data and copy to orig.bin
@@ -339,9 +335,16 @@ int main(int argc, char **argv)
   array_to_file("orig.bin", x, width * height);
 
   //estimate bit-depth and QP value
-  int bitdepth = calcMaxBitdepth(x, width * height);
-  int QP       = calcBitdepth(quantSize - 1);
+  int bitdepth = calcBitdepth(x, width * height);
+  int QP       = calcBitdepth(&stepSize, 1) - 1;
   printf("processing input: bit-depth input image=%d, QP=%d, partitioning depth=%d\n", bitdepth, QP, partDepth);
+
+  //adjust quantization step-size due to different transform scaling
+#if USE_TAUBMANN
+  int quantSize = stepSize >> 1;
+#else
+  int quantSize = stepSize;
+#endif
 
   //rate-distortion parameter
   unsigned long bits = 0UL;
@@ -380,29 +383,35 @@ int main(int argc, char **argv)
     int* currPred = pred + offset;
     int* currResi = resi + offset;
     int* currTrafo = trafo + offset;
+    int* currQuant = quant + offset;
     int* currReco = reco + offset;
     //compression: prediction, 9/7 transformtion and quatization
     blkcpy(currOrig, currResi, blkWidth, blkHeight, width);
     predict(blkMode, currReco, currPred, currResi, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
     blkcpy(currResi, currTrafo, blkWidth, blkHeight, width);
-    transform(currTrafo, blkWidth, blkHeight, width);
-    quantize(currTrafo, blkWidth, blkHeight, width, bitdepth, quantSize);
-    bits += coded_bits(currTrafo, blkWidth, blkHeight, width, bitdepth, QP);
-    blkcpy(currTrafo, currReco, blkWidth, blkHeight, width);
+    transform(currTrafo, blkWidth, blkHeight, width, bitdepth + 1);
+    blkcpy(currTrafo, currQuant, blkWidth, blkHeight, width);
+    quantize(currQuant, blkWidth, blkHeight, width, quantSize);
+    bits += coded_bits(currQuant, blkWidth, blkHeight, width, bitdepth, QP);
+    blkcpy(currQuant, currReco, blkWidth, blkHeight, width);
     //decompression
     dequantize(currReco, blkWidth, blkHeight, width, quantSize);
-    inv_transform(currReco, blkWidth, blkHeight, width);
+    inv_transform(currReco, blkWidth, blkHeight, width, bitdepth + 1);
     predict(blkMode, currReco, NULL, NULL, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
     dist += mse_dist(currOrig, currReco, blkWidth, blkHeight, width);
   }
+
+  //check quantization output in terms of bitdepth
+  assert(calcBitdepth(quant, width * height) <= bitdepth + 2 - QP);
+
   //safe everything to files
   array_to_file("pred.bin", pred, width * height);
   array_to_file("resi.bin", resi, width * height);
-  array_to_file("coeffs.bin", trafo, width * height);
+  array_to_file("coeffs.bin", quant, width * height);
   array_to_file("reco.bin", reco, width * height);
 
   //encoding
-  encode_huffman(trafo, width, height, width, "enc_comp.txt");
+  encode_huffman(quant, width, height, width, "enc_comp.txt");
   encode_fixlen8(x, width, height, width, "enc_orig.txt");
 
   printf("Relative distortion (MSE): %f\n", (double)dist / (double)(width * height));
@@ -413,6 +422,7 @@ int main(int argc, char **argv)
   free(pred);
   free(resi);
   free(trafo);
+  free(quant);
   free(reco);
   return 0;
 }
