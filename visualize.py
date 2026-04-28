@@ -344,7 +344,7 @@ class DemoRD:
             for simplex in simplices:
                 plt.plot(rd.points[simplex, 0], rd.points[simplex, 1], "k-")
             for vertex in vertices:
-                plt.text(rd.points[vertex, 0] - 0.1, rd.points[vertex, 1], str(rd.labels[vertex]), horizontalalignment="right")
+                plt.text(rd.points[vertex, 0] - 0.1, rd.points[vertex, 1], rd.label_data(vertex), horizontalalignment="right")
                 if figMode == 0:
                     continue
                 p = rd.points[vertex]
@@ -374,18 +374,18 @@ if __name__ == "__main__":
         os.makedirs(img_path)
     img_path += "/"
 
-    svg_steps_exp1 = img_path + "demo_astronaut_pred4_qs8_depth3.svg"
-    svg_steps_exp2 = img_path + "demo_astronaut_pred4_qs32_depth3.svg"
-    svg_steps_exp3 = img_path + "demo_camera_pred4_qs8_depth2.svg"
-    svg_steps_exp4 = img_path + "demo_camera_pred4_qs8_depth5.svg"
+    svg_steps_exp1 = img_path + "demo_astronaut_pred4_qs4_depth3.svg"
+    svg_steps_exp2 = img_path + "demo_astronaut_pred4_qs16_depth3.svg"
+    svg_steps_exp3 = img_path + "demo_camera_pred4_qs4_depth2.svg"
+    svg_steps_exp4 = img_path + "demo_camera_pred4_qs4_depth5.svg"
     svg_prediction = img_path + "demo_prediction.svg"
     svg_transform  = img_path + "demo_transform.svg"
     svg_encoding   = img_path + "demo_encoding.svg"
     svg_lagrange   = img_path + "demo_RD.svg"
-    DemoSteps.visualize("astronaut.bin", 512, 512, predMode=4, quantSize=8, splitLevel=3, save_as=svg_steps_exp1)
-    DemoSteps.visualize("astronaut.bin", 512, 512, predMode=4, quantSize=32, splitLevel=3, save_as=svg_steps_exp2)
-    DemoSteps.visualize("camera.bin", 512, 512, predMode=4, quantSize=8, splitLevel=2, save_as=svg_steps_exp3)
-    DemoSteps.visualize("camera.bin", 512, 512, predMode=4, quantSize=8, splitLevel=5, save_as=svg_steps_exp4)
+    DemoSteps.visualize("astronaut.bin", 512, 512, predMode=4, quantSize=4, splitLevel=3, save_as=svg_steps_exp1)
+    DemoSteps.visualize("astronaut.bin", 512, 512, predMode=4, quantSize=16, splitLevel=3, save_as=svg_steps_exp2)
+    DemoSteps.visualize("camera.bin", 512, 512, predMode=4, quantSize=4, splitLevel=2, save_as=svg_steps_exp3)
+    DemoSteps.visualize("camera.bin", 512, 512, predMode=4, quantSize=4, splitLevel=5, save_as=svg_steps_exp4)
     DemoPrediction.visualize(save_as=svg_prediction)
     DemoTrafo.visualize(save_as=svg_transform)
     DemoEncoding.visualize("astronaut.bin", 512, 512, predMode=4, quantSize=8, splitLevel=3, save_as=svg_encoding)

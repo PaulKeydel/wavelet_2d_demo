@@ -9,6 +9,7 @@
 #define USE_TAUBMANN    0
 #define MAX_BLOCK_SIZE  256
 #define LL_FIXED_LENGTH 0
+#define TRANSFORM_SKIP  0
 
 int clipLR(int val, int min, int max)
 {
@@ -187,7 +188,7 @@ unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth
   unsigned long bits = 0UL;
 #if LL_FIXED_LENGTH
   //fixed length coding for the LL band
-  int trafoBD = bitdepth + 2 - Qp;
+  int trafoBD = bitdepth + 1 - Qp;
   bits = (height / 2) * (width / 2) * (unsigned long)trafoBD;
 #endif
   //Huffman coding depending on LL_FIXED_LENGTH: all four subbands or the three details bands only
@@ -340,10 +341,10 @@ int main(int argc, char **argv)
   printf("processing input: bit-depth input image=%d, QP=%d, partitioning depth=%d\n", bitdepth, QP, partDepth);
 
   //adjust quantization step-size due to different transform scaling
-#if USE_TAUBMANN
-  int quantSize = stepSize >> 1;
-#else
+#if TRANSFORM_SKIP || USE_TAUBMANN
   int quantSize = stepSize;
+#else
+  int quantSize = stepSize << 1;
 #endif
 
   //rate-distortion parameter
@@ -388,21 +389,27 @@ int main(int argc, char **argv)
     //compression: prediction, 9/7 transformtion and quatization
     blkcpy(currOrig, currResi, blkWidth, blkHeight, width);
     predict(blkMode, currReco, currPred, currResi, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
+#if TRANSFORM_SKIP
+    blkcpy(currResi, currQuant, blkWidth, blkHeight, width);
+#else
     blkcpy(currResi, currTrafo, blkWidth, blkHeight, width);
     transform(currTrafo, blkWidth, blkHeight, width, bitdepth + 1);
     blkcpy(currTrafo, currQuant, blkWidth, blkHeight, width);
+#endif
     quantize(currQuant, blkWidth, blkHeight, width, quantSize);
     bits += coded_bits(currQuant, blkWidth, blkHeight, width, bitdepth, QP);
     blkcpy(currQuant, currReco, blkWidth, blkHeight, width);
     //decompression
     dequantize(currReco, blkWidth, blkHeight, width, quantSize);
+#if !TRANSFORM_SKIP
     inv_transform(currReco, blkWidth, blkHeight, width, bitdepth + 1);
+#endif
     predict(blkMode, currReco, NULL, NULL, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
     dist += mse_dist(currOrig, currReco, blkWidth, blkHeight, width);
   }
 
   //check quantization output in terms of bitdepth
-  assert(calcBitdepth(quant, width * height) <= bitdepth + 2 - QP);
+  assert(calcBitdepth(quant, width * height) <= bitdepth + 1 - QP);
 
   //safe everything to files
   array_to_file("pred.bin", pred, width * height);

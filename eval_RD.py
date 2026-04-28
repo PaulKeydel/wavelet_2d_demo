@@ -7,47 +7,51 @@ import pandas as pd
 
 class RDeval:
     def __init__(self, binImg: str, width: int, height: int):
-        dist = list()
+        dist   = list()
         bitlen = list()
-        qs = list()
-        self.labels = list()
+        qs     = list()
+        preds  = list()
+        splits = list()
         for predMode in range(0, 5):
-            for quantSize in range(8, 65, 8):
+            for quantSize in range(4, 33, 4):
                 for splitLevel in range(2, 6):
                     command = "./comp_demo " + binImg + " " + str(width) + " " + str(height) + " " + str(predMode) + " " + str(quantSize) + " " + str(splitLevel)
                     p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
                     (output, err) = p.communicate()
                     p.wait()
                     output = output.decode("utf-8")
-                    dist_val = float(output.split("\n")[1].split(" ")[-1])
-                    bitlen_val = float(output.split("\n")[2].split(" ")[-1])
-                    #to make the figure looking nicer, remove higher bitrates
-                    if bitlen_val <= 5:
-                        dist.append(dist_val)
-                        bitlen.append(bitlen_val)
-                        qs.append(quantSize)
-                        self.labels.append({"predMode": predMode, "quantSize": quantSize, "splitLevel": splitLevel})
+                    dist.append(float(output.split("\n")[1].split(" ")[-1]))
+                    bitlen.append(float(output.split("\n")[2].split(" ")[-1]))
+                    qs.append(quantSize)
+                    preds.append(predMode)
+                    splits.append(splitLevel)
         self.bitlen = np.array(bitlen)
-        self.dist   = np.array(dist)
-        self.qs     = np.array(qs)
-        self.points = np.column_stack((bitlen, dist))
+        mask = (self.bitlen <= 0.92 * self.bitlen.max())
+        self.dist   = np.array(dist)[mask]
+        self.qs     = np.array(qs)[mask]
+        self.preds  = np.array(preds)[mask]
+        self.splits = np.array(splits)[mask]
+        self.points = np.column_stack((bitlen, dist))[mask]
+        self.bitlen = self.bitlen[mask]
+
+    def label_data(self, index: int) -> str:
+        return ("predMode: " + str(self.preds[index]) + " quantSize: " + str(self.qs[index]) + " splitLevel: " + str(self.splits[index]))
 
     def get_conv_hull(self) -> tuple[np.ndarray, np.ndarray]:
         hull = ConvexHull(self.points)
+        vertices = hull.vertices.copy()
+        vertices = np.roll(vertices, -np.argmin(self.bitlen[vertices]))
+        vertices = vertices[:(np.argmin(self.dist[vertices]) + 0)] #exclude R-D point with lowest distortion from convex hull
+
         simplices = list()
-        vertices = list()
-        for simplex in hull.simplices[1:]:
+        for simplex in hull.simplices:
             p0 = [self.points[simplex, 0][0], self.points[simplex, 1][0]]
             p1 = [self.points[simplex, 0][1], self.points[simplex, 1][1]]
-            slope = (p1[1] - p0[1]) / (p1[0] - p0[0])
-            if (slope <= -10) and (slope > -100000):
-                vertex0 = np.where(self.points == p0)[0][0]
-                vertex1 = np.where(self.points == p1)[0][0]
+            if (p0 in self.points[vertices]) and (p1 in self.points[vertices]):
                 simplices.append(simplex)
-                vertices = list(set(vertices + [vertex0, vertex1]))
         assert(len(vertices) - 1 == len(simplices))
-        vertices = sorted(vertices, key=lambda x: self.qs[x])
-        return np.array(vertices), np.array(simplices)
+        #vertices = sorted(vertices, key=lambda x: self.qs[x])
+        return vertices, np.array(simplices)
 
     def calc_slopes(self, vertices: np.ndarray) -> np.ndarray:
         slopes = np.empty(len(self.points))
@@ -75,7 +79,7 @@ class RDeval:
         lambda_hull = list(-(slopes[vertices]))
         z = np.polyfit(qs_hull, lambda_hull, 2)
         quad_fit = np.poly1d(z)
-        lambda_vec = np.vectorize(lambda t: quad_fit(t))
+        lambda_vec = np.vectorize(lambda t: quad_fit(t) if quad_fit(t) > 0 else 0)
         return lambda_vec(self.qs), quad_fit
 
     def calc_costs(self, lambdas: np.ndarray) -> np.ndarray:
