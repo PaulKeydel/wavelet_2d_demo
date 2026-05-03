@@ -7,7 +7,7 @@
 #include "w97.h"
 
 #define USE_TAUBMANN    0
-#define MAX_BLOCK_SIZE  256
+#define MAX_BLOCK_SIZE  128
 #define LL_FIXED_LENGTH 0
 #define TRANSFORM_SKIP  0
 
@@ -376,8 +376,8 @@ void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* re
 
 double calcLambda(int stepSize)
 {
-  double res = 2.93 * stepSize * stepSize - 5.176 * stepSize - 77.45;
-  res = res < 30 ? 30 : res;
+  double res = 3.392 * stepSize * stepSize - 24.93 * stepSize + 53.88;
+  res = res < 5 ? 5 : res;
   return res;
 }
 
@@ -435,7 +435,7 @@ int main(int argc, char **argv)
     double bestCost = MAXFLOAT;
     int bestPred    = 0;
     int bestDepth   = 0;
-    for (int partDepth = 0; partDepth < 6; partDepth++)
+    for (int partDepth = 0; partDepth < 5; partDepth++)
     {
       for (int predMode = 0; predMode < 4; predMode++)
       {

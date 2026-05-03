@@ -11,8 +11,8 @@ class RDeval:
         bitlen  = list()
         qs      = list()
         lambdas = list()
-        for quantSize in range(4, 33, 4):
-            for lagrMult in range(50, 2501, 50):
+        for quantSize in range(4, 25, 4):
+            for lagrMult in range(25, 1550, 75):
                 command = "./comp_demo " + binImg + " " + str(width) + " " + str(height) + " " + str(quantSize) + " " + str(lagrMult)
                 p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
                 (output, err) = p.communicate()

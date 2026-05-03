@@ -122,7 +122,7 @@ class DemoSteps:
         entr_orig = calc_entropy(orig)
         entr_coeff = calc_entropy(coeff)
 
-        gridsize = 256
+        gridsize = 128
         clip_x0 = 0
         clip_x1 = width
         clip_y0 = 0
@@ -146,7 +146,7 @@ class DemoSteps:
         axs[0, 1].xaxis.set_ticks([])
         axs[0, 1].yaxis.set_ticks([])
         axs[0, 1].set_ylim(bottom=height, top=0)
-        axs[0, 1].set_xlim(right=height, left=0)
+        axs[0, 1].set_xlim(right=width, left=0)
         for y in range(clip_y0, clip_y1 + 1, gridsize):
             axs[0, 1].plot([clip_x0, clip_x1], [y, y], linewidth=1, color='r')
         for x in range(clip_x0, clip_x1 + 1, gridsize):
@@ -344,7 +344,9 @@ class DemoRD:
             for simplex in simplices:
                 plt.plot(rd.points[simplex, 0], rd.points[simplex, 1], "k-")
             for vertex in vertices:
-                lbl = " quantSize: " + str(rd.qs[vertex]) + " lambda: " + str(rd.lambdas[vertex]) + " (" + "{:.2f}".format(lambdas[vertex] if lambdas[vertex] > 30 else 30.0) + ")"
+                if costs[vertex] > 1.0:
+                    continue
+                lbl = " quantSize: " + str(rd.qs[vertex]) + " lambda: " + str(rd.lambdas[vertex]) + " (" + "{:.2f}".format(lambdas[vertex] if lambdas[vertex] > 5 else 5.0) + ")"
                 plt.text(rd.points[vertex, 0] - 0.1, rd.points[vertex, 1], lbl, horizontalalignment="right")
                 if figMode == 0:
                     continue
