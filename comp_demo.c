@@ -58,7 +58,7 @@ void predict(int predMode, int* reco, int* dst, int* resi, int width, int height
       }
       else if (predMode == 3)
       {
-        pred = (hasLeft && hasTop) ? ((reco[colidx - stride] + reco[rowidx * stride - 1]) >> 1) : defaultPred;
+        pred = ((hasLeft ? reco[rowidx * stride - 1] : defaultPred) + (hasTop ? reco[colidx - stride] : defaultPred)) >> 1;
       }
       //store prediction signal
       if (dst != NULL)
@@ -309,21 +309,92 @@ void blkcpy(int* src, int* dst, int width, int height, int stride)
   }
 }
 
+void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin, unsigned long* bits, unsigned long* dist)
+{
+  //calculate QP value and adjust quantization step-size (due to different transform scalings)
+  int QP = calcBitdepth(&stepSize, 1) - 1;
+#if TRANSFORM_SKIP || USE_TAUBMANN
+  int quantSize = stepSize;
+#else
+  int quantSize = stepSize << 1;
+#endif
+
+  //split and for each subblock do first compression and then decompression
+  int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
+  int blkHeight = MAX_BLOCK_SIZE >> partDepth;
+  int blkStride = 1 << partDepth;
+  int blkNum    = (1 << partDepth) * (1 << partDepth);
+  for (int subblk = 0; subblk < blkNum; subblk++)
+  {
+    bool hasLeft = true;
+    bool hasTop = true;
+    if (subblk == 0)
+    {
+      hasLeft = leftMargin;
+      hasTop = topMargin;
+    }
+    else if (subblk / blkStride == 0)
+    {
+      hasLeft = true;
+      hasTop = topMargin;
+    }
+    else if (subblk % blkStride == 0)
+    {
+      hasLeft = leftMargin;
+      hasTop = true;
+    }
+
+    int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;
+    int* currOrig = x + offset;
+    int* currPred = pred + offset;
+    int* currResi = resi + offset;
+    int* currTrafo = trafo + offset;
+    int* currQuant = quant + offset;
+    int* currReco = reco + offset;
+    //compression: prediction, 9/7 transformtion and quatization
+    blkcpy(currOrig, currResi, blkWidth, blkHeight, stride);
+    predict(predMode, currReco, currPred, currResi, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
+#if TRANSFORM_SKIP
+    blkcpy(currResi, currQuant, blkWidth, blkHeight, width);
+#else
+    blkcpy(currResi, currTrafo, blkWidth, blkHeight, stride);
+    transform(currTrafo, blkWidth, blkHeight, stride, bitdepth + 1);
+    blkcpy(currTrafo, currQuant, blkWidth, blkHeight, stride);
+#endif
+    quantize(currQuant, blkWidth, blkHeight, stride, quantSize);
+    *bits += coded_bits(currQuant, blkWidth, blkHeight, stride, bitdepth, QP);
+    blkcpy(currQuant, currReco, blkWidth, blkHeight, stride);
+    //decompression
+    dequantize(currReco, blkWidth, blkHeight, stride, quantSize);
+#if !TRANSFORM_SKIP
+    inv_transform(currReco, blkWidth, blkHeight, stride, bitdepth + 1);
+#endif
+    predict(predMode, currReco, NULL, NULL, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
+    *dist += mse_dist(currOrig, currReco, blkWidth, blkHeight, stride);
+  }
+}
+
+double calcLambda(int stepSize)
+{
+  double res = 2.93 * stepSize * stepSize - 5.176 * stepSize - 77.45;
+  res = res < 30 ? 30 : res;
+  return res;
+}
+
 int main(int argc, char **argv)
 {
-  if (argc != 7)
+  if (argc != 5 && argc != 6)
   {
     printf("Not enough or missing parameter!\n");
-    printf("Usage: comp_demo <image_file> <width> <height> <prediction mode> <quant step-size> <partitioning depth>\n");
+    printf("Usage: comp_demo <image_file> <width> <height> <quant step-size> <optional: lambda>\n");
     return -1;
   }
 
   //declarations
   int width     = atoi(argv[2]);
   int height    = atoi(argv[3]);
-  int predMode  = atoi(argv[4]);
-  int stepSize  = atoi(argv[5]);
-  int partDepth = atoi(argv[6]);
+  int stepSize  = atoi(argv[4]);
+  double lambda = argc == 6 ? atof(argv[5]) : calcLambda(stepSize);
   int* x        = (int*)malloc(width * height * sizeof(int));
   int* pred     = (int*)malloc(width * height * sizeof(int));
   int* resi     = (int*)malloc(width * height * sizeof(int));
@@ -338,76 +409,82 @@ int main(int argc, char **argv)
   //estimate bit-depth and QP value
   int bitdepth = calcBitdepth(x, width * height);
   int QP       = calcBitdepth(&stepSize, 1) - 1;
-  printf("processing input: bit-depth input image=%d, QP=%d, partitioning depth=%d\n", bitdepth, QP, partDepth);
-
-  //adjust quantization step-size due to different transform scaling
-#if TRANSFORM_SKIP || USE_TAUBMANN
-  int quantSize = stepSize;
-#else
-  int quantSize = stepSize << 1;
-#endif
+  printf("processing input: bit-depth input image=%d, QP=%d, Lambda=%f\n", bitdepth, QP, lambda);
 
   //rate-distortion parameter
-  unsigned long bits = 0UL;
-  unsigned long dist = 0UL;
+  unsigned long totalBits = 0UL;
+  unsigned long totalDist = 0UL;
 
   //partitioning
-  int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
-  int blkHeight = MAX_BLOCK_SIZE >> partDepth;
-  int blkStride = width / blkWidth;
-  int numBlocks = (width / blkWidth) * (height / blkHeight);
-
-  //quad split and for each block do first compression and then decompression
-  for (int subblk = 0; subblk < numBlocks; subblk++)
+  int numUnitsX = width / MAX_BLOCK_SIZE;
+  int numUnitsY = height / MAX_BLOCK_SIZE;
+  int numUnits  = numUnitsX * numUnitsY;
+  for (int ui = 0; ui < numUnits; ui++)
   {
     bool leftMargin = true;
     bool topMargin = true;
-    if (subblk == 0)
+    if (ui == 0)
     {
       leftMargin = false;
       topMargin = false;
     }
-    if (subblk != 0 && subblk / blkStride == 0) topMargin = false;
-    if (subblk != 0 && subblk % blkStride == 0) leftMargin = false;
-    int blkMode = -1;
-    if (predMode < 4)
-    {
-      blkMode = predMode;
-    }
-    else if (predMode == 4)
-    {
-      blkMode = 2 * (int)topMargin + (int)leftMargin;
-    }
+    if (ui != 0 && ui / numUnitsX == 0) topMargin = false;
+    if (ui != 0 && ui % numUnitsX == 0) leftMargin = false;
 
-    int offset = (subblk / blkStride) * blkHeight * width + (subblk % blkStride) * blkWidth;
-    int* currOrig = x + offset;
-    int* currPred = pred + offset;
-    int* currResi = resi + offset;
-    int* currTrafo = trafo + offset;
-    int* currQuant = quant + offset;
-    int* currReco = reco + offset;
-    //compression: prediction, 9/7 transformtion and quatization
-    blkcpy(currOrig, currResi, blkWidth, blkHeight, width);
-    predict(blkMode, currReco, currPred, currResi, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
-#if TRANSFORM_SKIP
-    blkcpy(currResi, currQuant, blkWidth, blkHeight, width);
-#else
-    blkcpy(currResi, currTrafo, blkWidth, blkHeight, width);
-    transform(currTrafo, blkWidth, blkHeight, width, bitdepth + 1);
-    blkcpy(currTrafo, currQuant, blkWidth, blkHeight, width);
-#endif
-    quantize(currQuant, blkWidth, blkHeight, width, quantSize);
-    bits += coded_bits(currQuant, blkWidth, blkHeight, width, bitdepth, QP);
-    blkcpy(currQuant, currReco, blkWidth, blkHeight, width);
-    //decompression
-    dequantize(currReco, blkWidth, blkHeight, width, quantSize);
-#if !TRANSFORM_SKIP
-    inv_transform(currReco, blkWidth, blkHeight, width, bitdepth + 1);
-#endif
-    predict(blkMode, currReco, NULL, NULL, blkWidth, blkHeight, width, leftMargin, topMargin, bitdepth);
-    dist += mse_dist(currOrig, currReco, blkWidth, blkHeight, width);
+    int offset = (ui / numUnitsX) * MAX_BLOCK_SIZE * width + (ui % numUnitsX) * MAX_BLOCK_SIZE;
+    double bestCost = MAXFLOAT;
+    int bestPred    = 0;
+    int bestDepth   = 0;
+    for (int partDepth = 0; partDepth < 6; partDepth++)
+    {
+      for (int predMode = 0; predMode < 4; predMode++)
+      {
+        unsigned long blkBits = 0UL;
+        unsigned long blkDist = 0UL;
+        compress_unit(
+          x + offset,
+          pred + offset,
+          resi + offset,
+          trafo + offset,
+          quant + offset,
+          reco + offset,
+          bitdepth,
+          width,
+          stepSize,
+          partDepth,
+          predMode,
+          topMargin,
+          leftMargin,
+          &blkBits,
+          &blkDist
+        );
+        double blkCost = (double)blkDist + lambda * (double)blkBits;
+        if (blkCost < bestCost)
+        {
+          bestDepth = partDepth;
+          bestPred = predMode;
+          bestCost = blkCost;
+        }
+      }
+    }
+    compress_unit(
+      x + offset,
+      pred + offset,
+      resi + offset,
+      trafo + offset,
+      quant + offset,
+      reco + offset,
+      bitdepth,
+      width,
+      stepSize,
+      bestDepth,
+      bestPred,
+      topMargin,
+      leftMargin,
+      &totalBits,
+      &totalDist
+    );
   }
-
   //check quantization output in terms of bitdepth
   assert(calcBitdepth(quant, width * height) <= bitdepth + 1 - QP);
 
@@ -421,9 +498,9 @@ int main(int argc, char **argv)
   encode_huffman(quant, width, height, width, "enc_comp.txt");
   encode_fixlen8(x, width, height, width, "enc_orig.txt");
 
-  printf("Relative distortion (MSE): %f\n", (double)dist / (double)(width * height));
-  printf("Average symbol length (Bits): %f\n", (double)bits / (double)(width * height));
-  printf("Compression rate: %f\n", 1.0 - (double)bits / (double)(bitdepth * width * height));
+  printf("Relative distortion (MSE): %f\n", (double)totalDist / (double)(width * height));
+  printf("Average symbol length (Bits): %f\n", (double)totalBits / (double)(width * height));
+  printf("Compression rate: %f\n", 1.0 - (double)totalBits / (double)(bitdepth * width * height));
 
   free(x);
   free(pred);

@@ -9,8 +9,8 @@ import pywt
 from pylab import cm
 from eval_RD import RDeval
 
-def run_compression(binImg: str, width: int, height: int, predMode: int, quantSize: int, splitLevel: int) -> tuple[float, float]:
-    command = "./comp_demo " + binImg + " " + str(width) + " " + str(height) + " " + str(predMode) + " " + str(quantSize) + " " + str(splitLevel)
+def run_compression(binImg: str, width: int, height: int, quantSize: int) -> tuple[float, float]:
+    command = "./comp_demo " + binImg + " " + str(width) + " " + str(height) + " " + str(quantSize)
     p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
     (output, err) = p.communicate()
     p.wait()
@@ -107,12 +107,11 @@ class DemoPrediction:
 
 class DemoSteps:
     @staticmethod
-    def visualize(binImg: str, width: int, height: int, predMode: int, quantSize: int, splitLevel: int, save_as: str = ""):
-        assert(splitLevel > 0)
+    def visualize(binImg: str, width: int, height: int, quantSize: int, save_as: str = ""):
         #close current opened plot window
         plt.close()
 
-        run_compression(binImg, width, height, predMode, quantSize, splitLevel)
+        run_compression(binImg, width, height, quantSize)
         orig, reco, pred, resi, coeff = load_binaries(width, height)
 
         print("  orig: max=" + str(np.max(orig)) + " min=" + str(np.min(orig)))
@@ -123,11 +122,11 @@ class DemoSteps:
         entr_orig = calc_entropy(orig)
         entr_coeff = calc_entropy(coeff)
 
-        gridsize = 2 ** (8 - splitLevel)
+        gridsize = 256
         clip_x0 = 0
-        clip_x1 = 256
+        clip_x1 = width
         clip_y0 = 0
-        clip_y1 = 256
+        clip_y1 = height
         fig, axs = plt.subplots(2, 3, figsize=(12, 8))
 
         img1 = orig
@@ -146,25 +145,26 @@ class DemoSteps:
         axs[0, 1].set_title("(1) Partitioning")
         axs[0, 1].xaxis.set_ticks([])
         axs[0, 1].yaxis.set_ticks([])
-        if clip_x0 != 0 or clip_x1 != width or clip_y0 != 0 or clip_y1 != height:
-            for y in range(clip_y0, 1 + (clip_y1 - clip_y0) // 2, gridsize):
-                axs[0, 1].plot([clip_x0, (clip_x1 - clip_x0) // 2], [y, y], linewidth=1, color='r')
-            for x in range(clip_x0, 1 + (clip_x1 - clip_x0) // 2, gridsize):
-                axs[0, 1].plot([x, x], [clip_y0, (clip_y1 - clip_y0) // 2], linewidth=1, color='r')
+        axs[0, 1].set_ylim(bottom=height, top=0)
+        axs[0, 1].set_xlim(right=height, left=0)
+        for y in range(clip_y0, clip_y1 + 1, gridsize):
+            axs[0, 1].plot([clip_x0, clip_x1], [y, y], linewidth=1, color='r')
+        for x in range(clip_x0, clip_x1 + 1, gridsize):
+            axs[0, 1].plot([x, x], [clip_y0, clip_y1], linewidth=1, color='r')
 
-        img4 = np.abs(coeff[clip_y0:((clip_y0 + clip_y1) // 2), clip_x0:((clip_x0 + clip_x1) // 2)])
+        img4 = np.abs(coeff[clip_y0:clip_y1, clip_x0:clip_x1])
         axs[1, 1].matshow(img4, cmap=cm.gray_r)
         axs[1, 1].set_title("(4) Transformed and quantized")
         axs[1, 1].xaxis.set_ticks([])
         axs[1, 1].yaxis.set_ticks([])
 
-        img5 = pred[clip_y0:((clip_y0 + clip_y1) // 2), clip_x0:((clip_x0 + clip_x1) // 2)]
+        img5 = pred[clip_y0:clip_y1, clip_x0:clip_x1]
         axs[0, 2].matshow(img5, cmap=cm.gray)
         axs[0, 2].set_title("(2) Prediction signal")
         axs[0, 2].xaxis.set_ticks([])
         axs[0, 2].yaxis.set_ticks([])
 
-        img6 = np.abs(resi[clip_y0:((clip_y0 + clip_y1) // 2), clip_x0:((clip_x0 + clip_x1) // 2)])
+        img6 = np.abs(resi[clip_y0:clip_y1, clip_x0:clip_x1])
         axs[1, 2].matshow(img6, cmap=cm.gray_r)
         axs[1, 2].set_title("(3) Residual (absolute values)")
         axs[1, 2].xaxis.set_ticks([])
@@ -182,11 +182,11 @@ class DemoSteps:
 
 class DemoEncoding:
     @staticmethod
-    def visualize(binImg: str, width: int, height: int, predMode: int, quantSize: int, splitLevel: int, save_as: str = ""):
+    def visualize(binImg: str, width: int, height: int, quantSize: int, save_as: str = ""):
         #close current opened plot window
         plt.close()
 
-        run_compression(binImg, width, height, predMode, quantSize, splitLevel)
+        run_compression(binImg, width, height, quantSize)
         orig, reco, pred, resi, coeff = load_binaries(width, height)
 
         enc_orig = load_encoding("enc_orig.txt", width, height)
@@ -340,16 +340,17 @@ class DemoRD:
                 title = "Increasing R-D-costs (J = D + λR) orthogonal to the optimal RD-curve"
             fig = plt.figure(figsize=(10, 6))
             plt.scatter(rd.bitlen, rd.dist, c=cats, cmap="viridis_r")
-            plt.xlim(-1.8, None)
+            plt.xlim(0, None)
             for simplex in simplices:
                 plt.plot(rd.points[simplex, 0], rd.points[simplex, 1], "k-")
             for vertex in vertices:
-                plt.text(rd.points[vertex, 0] - 0.1, rd.points[vertex, 1], rd.label_data(vertex), horizontalalignment="right")
+                lbl = " quantSize: " + str(rd.qs[vertex]) + " lambda: " + str(rd.lambdas[vertex]) + " (" + "{:.2f}".format(lambdas[vertex] if lambdas[vertex] > 30 else 30.0) + ")"
+                plt.text(rd.points[vertex, 0] - 0.1, rd.points[vertex, 1], lbl, horizontalalignment="right")
                 if figMode == 0:
                     continue
                 p = rd.points[vertex]
                 m_orth = -1 / slopes[vertex]
-                x_tickz = np.array([p[0] - 0.1, p[0] + 1.0])
+                x_tickz = np.array([p[0] - 0.1, p[0] + 0.3])
                 plt.plot(x_tickz, m_orth * (x_tickz - p[0]) + p[1], "g:")
             #plt.gca().set_yscale("log")
             plt.colorbar()
@@ -374,19 +375,19 @@ if __name__ == "__main__":
         os.makedirs(img_path)
     img_path += "/"
 
-    svg_steps_exp1 = img_path + "demo_astronaut_pred4_qs4_depth3.svg"
-    svg_steps_exp2 = img_path + "demo_astronaut_pred4_qs16_depth3.svg"
-    svg_steps_exp3 = img_path + "demo_camera_pred4_qs4_depth2.svg"
-    svg_steps_exp4 = img_path + "demo_camera_pred4_qs4_depth5.svg"
+    svg_steps_exp1 = img_path + "demo_astronaut_qs4.svg"
+    svg_steps_exp2 = img_path + "demo_astronaut_qs16.svg"
+    svg_steps_exp3 = img_path + "demo_camera_qs4.svg"
+    svg_steps_exp4 = img_path + "demo_camera_qs16.svg"
     svg_prediction = img_path + "demo_prediction.svg"
     svg_transform  = img_path + "demo_transform.svg"
     svg_encoding   = img_path + "demo_encoding.svg"
     svg_lagrange   = img_path + "demo_RD.svg"
-    DemoSteps.visualize("astronaut.bin", 512, 512, predMode=4, quantSize=4, splitLevel=3, save_as=svg_steps_exp1)
-    DemoSteps.visualize("astronaut.bin", 512, 512, predMode=4, quantSize=16, splitLevel=3, save_as=svg_steps_exp2)
-    DemoSteps.visualize("camera.bin", 512, 512, predMode=4, quantSize=4, splitLevel=2, save_as=svg_steps_exp3)
-    DemoSteps.visualize("camera.bin", 512, 512, predMode=4, quantSize=4, splitLevel=5, save_as=svg_steps_exp4)
+    DemoSteps.visualize("astronaut.bin", 512, 512, quantSize=4, save_as=svg_steps_exp1)
+    DemoSteps.visualize("astronaut.bin", 512, 512, quantSize=16, save_as=svg_steps_exp2)
+    DemoSteps.visualize("camera.bin", 512, 512, quantSize=4, save_as=svg_steps_exp3)
+    DemoSteps.visualize("camera.bin", 512, 512, quantSize=16, save_as=svg_steps_exp4)
     DemoPrediction.visualize(save_as=svg_prediction)
     DemoTrafo.visualize(save_as=svg_transform)
-    DemoEncoding.visualize("astronaut.bin", 512, 512, predMode=4, quantSize=8, splitLevel=3, save_as=svg_encoding)
+    DemoEncoding.visualize("astronaut.bin", 512, 512, quantSize=8, save_as=svg_encoding)
     DemoRD.visualize("astronaut.bin", 512, 512, save_as=svg_lagrange)

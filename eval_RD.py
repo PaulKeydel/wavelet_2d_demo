@@ -7,41 +7,32 @@ import pandas as pd
 
 class RDeval:
     def __init__(self, binImg: str, width: int, height: int):
-        dist   = list()
-        bitlen = list()
-        qs     = list()
-        preds  = list()
-        splits = list()
-        for predMode in range(0, 5):
-            for quantSize in range(4, 33, 4):
-                for splitLevel in range(2, 6):
-                    command = "./comp_demo " + binImg + " " + str(width) + " " + str(height) + " " + str(predMode) + " " + str(quantSize) + " " + str(splitLevel)
-                    p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
-                    (output, err) = p.communicate()
-                    p.wait()
-                    output = output.decode("utf-8")
-                    dist.append(float(output.split("\n")[1].split(" ")[-1]))
-                    bitlen.append(float(output.split("\n")[2].split(" ")[-1]))
-                    qs.append(quantSize)
-                    preds.append(predMode)
-                    splits.append(splitLevel)
+        dist    = list()
+        bitlen  = list()
+        qs      = list()
+        lambdas = list()
+        for quantSize in range(4, 33, 4):
+            for lagrMult in range(50, 2501, 50):
+                command = "./comp_demo " + binImg + " " + str(width) + " " + str(height) + " " + str(quantSize) + " " + str(lagrMult)
+                p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
+                (output, err) = p.communicate()
+                p.wait()
+                output = output.decode("utf-8")
+                dist.append(float(output.split("\n")[1].split(" ")[-1]))
+                bitlen.append(float(output.split("\n")[2].split(" ")[-1]))
+                qs.append(quantSize)
+                lambdas.append(lagrMult)
         self.bitlen = np.array(bitlen)
-        mask = (self.bitlen <= 0.92 * self.bitlen.max())
-        self.dist   = np.array(dist)[mask]
-        self.qs     = np.array(qs)[mask]
-        self.preds  = np.array(preds)[mask]
-        self.splits = np.array(splits)[mask]
-        self.points = np.column_stack((bitlen, dist))[mask]
-        self.bitlen = self.bitlen[mask]
-
-    def label_data(self, index: int) -> str:
-        return ("predMode: " + str(self.preds[index]) + " quantSize: " + str(self.qs[index]) + " splitLevel: " + str(self.splits[index]))
+        self.dist   = np.array(dist)
+        self.qs     = np.array(qs)
+        self.lambdas = np.array(lambdas)
+        self.points = np.column_stack((bitlen, dist))
 
     def get_conv_hull(self) -> tuple[np.ndarray, np.ndarray]:
         hull = ConvexHull(self.points)
         vertices = hull.vertices.copy()
         vertices = np.roll(vertices, -np.argmin(self.bitlen[vertices]))
-        vertices = vertices[:(np.argmin(self.dist[vertices]) + 0)] #exclude R-D point with lowest distortion from convex hull
+        vertices = vertices[:(np.argmin(self.dist[vertices]) + 1)] #not exclude R-D point with lowest distortion from convex hull
 
         simplices = list()
         for simplex in hull.simplices:
@@ -79,7 +70,7 @@ class RDeval:
         lambda_hull = list(-(slopes[vertices]))
         z = np.polyfit(qs_hull, lambda_hull, 2)
         quad_fit = np.poly1d(z)
-        lambda_vec = np.vectorize(lambda t: quad_fit(t) if quad_fit(t) > 0 else 0)
+        lambda_vec = np.vectorize(lambda t: quad_fit(t))
         return lambda_vec(self.qs), quad_fit
 
     def calc_costs(self, lambdas: np.ndarray) -> np.ndarray:

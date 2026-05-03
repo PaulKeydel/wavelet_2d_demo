@@ -15,15 +15,15 @@ First, the original image is splitted into blocks of same size (biggest block si
 ![RD demo](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_RD_costs.svg)
 
 
-***Example: The effect of partitioning***
-![Compression demo blk-128](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_camera_pred4_qs4_depth2.svg)
+***Example 1: Lossy image compression***
+![Compression demo1a](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_camera_qs4.svg)
 
-![Compression demo blk-32](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_camera_pred4_qs4_depth5.svg)
+![Compression demo1b](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_camera_qs16.svg)
 
-***Example: The effect of quantization***
-![Compression demo qp-3](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_astronaut_pred4_qs4_depth3.svg)
+***Example 2: Lossy image compression***
+![Compression demo2a](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_astronaut_qs4.svg)
 
-![Compression demo qp-5](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_astronaut_pred4_qs16_depth3.svg)
+![Compression demo2b](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_astronaut_qs16.svg)
 
 **How to use this project?**
 
