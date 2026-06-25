@@ -39,12 +39,24 @@ def load_binaries(width: int, height: int) -> tuple[np.ndarray, np.ndarray, np.n
 
     return orig, reco, pred, resi, coeff
 
-def load_encoding(fname: str, width: int, height: int) -> np.ndarray:
-    lines = []
-    with open(fname, "r", encoding="UTF-8") as txtfile:
-        lines = txtfile.read().splitlines()
-    assert(len(lines) == width * height)
-    return np.reshape(np.array(lines, dtype=object), (width, height))
+def encode_fixlen(n: int, len: int) -> str:
+    res = ["0"] * len
+    i = 0
+    while (n > 0):
+        res[len - i - 1] = str(n % 2)
+        n = n // 2
+        i += 1
+    return "".join(res)
+
+def encode_huffman(n: int) -> str:
+    res = []
+    if (n == 0):
+        res.append('0')
+    else:
+        res = ["1"] * abs(n)
+        res.append('0')
+        res.append('0' if n < 0 else '1')
+    return "".join(res)
 
 def calc_entropy(message: np.ndarray):
     msg = message.flatten(order='C')
@@ -189,9 +201,6 @@ class DemoEncoding:
         run_compression(binImg, width, height, quantSize)
         orig, reco, pred, resi, coeff = load_binaries(width, height)
 
-        enc_orig = load_encoding("enc_orig.txt", width, height)
-        enc_coeff = load_encoding("enc_comp.txt", width, height)
-
         #shape of the zoom window
         wsx = 60
         wsy = 60
@@ -214,7 +223,7 @@ class DemoEncoding:
         for i in range(4):
             xt = x0 + (i % 2) * (wsx + verge) + verge
             yt = y0 + (i // 2) * (wsy + verge) + verge + 30
-            axs[0].text(xt, yt, str(enc_orig[y0 + (i // 2), x0 + (i % 2)]), ha="left", va="center", fontsize=6)
+            axs[0].text(xt, yt, encode_fixlen(orig[y0 + (i // 2), x0 + (i % 2)], 8), ha="left", va="center", fontsize=6)
         axs[0].xaxis.set_ticks([])
         axs[0].yaxis.set_ticks([])
 
@@ -231,7 +240,7 @@ class DemoEncoding:
         for i in range(4):
             xt = x0 + (i % 2) * (wsx + verge) + verge
             yt = y0 + (i // 2) * (wsy + verge) + verge + 30
-            axs[1].text(xt, yt, str(enc_coeff[y0 + (i // 2), x0 + (i % 2)]), ha="left", va="center", fontsize=6)
+            axs[1].text(xt, yt, encode_huffman(coeff[y0 + (i // 2), x0 + (i % 2)]), ha="left", va="center", fontsize=6)
         axs[1].xaxis.set_ticks([])
         axs[1].yaxis.set_ticks([])
 

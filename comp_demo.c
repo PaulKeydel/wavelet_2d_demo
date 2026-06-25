@@ -198,13 +198,8 @@ unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth
     {
       if ((rowidx >= height/2 || colidx >= width/2) || !LL_FIXED_LENGTH)
       {
-        int signFlag = 0;
-        if (x[rowidx * stride + colidx] != 0)
-        {
-          signFlag = x[rowidx * stride + colidx] > 0 ? 1 : -1;
-        }
-        unsigned bitsCurr = (unsigned)(abs(x[rowidx * stride + colidx]) + 1 + abs(signFlag));
-        bits += (unsigned long) bitsCurr;
+        int absVal = abs(x[rowidx * stride + colidx]);
+        bits += (unsigned long)(absVal == 0 ? 1 : absVal + 2);
       }
     }
   }
@@ -262,7 +257,7 @@ void encode_unit(int* quant, int bitdepth, int stride, int stepSize, int partDep
   
   int nBuf = MAX_BLOCK_SIZE * MAX_BLOCK_SIZE;
   int maxBits = (1 << quantBD) - 1 + 2; //the +2 because of sign bit and the trailing separator bit
-  char* outStream = (char*)malloc((3 + 1) + (2 + 1) + nBuf * maxBits);
+  char* outStream = (char*)malloc((3 + 1) + (2 + 1) + (nBuf * maxBits + 1));
   char* buffer = outStream;
 
   encode_fixlen(partDepth, 3, buffer);
@@ -289,7 +284,7 @@ void encode_unit(int* quant, int bitdepth, int stride, int stepSize, int partDep
   for (int seg = 0; seg < numSegments; seg++)
   {
     char byteValue = 0;
-    int blkLen = (seg != numSegments - 1) ? 8 : binLen % 8;
+    int blkLen = !(seg == numSegments - 1 && binLen % 8 > 0) ? 8 : binLen % 8;
     for (int i = 0; i < blkLen; i++)
     {
       byteValue += (1 << i) * (outStream[seg * 8 + blkLen - 1 - i] - '0');
