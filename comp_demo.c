@@ -274,7 +274,7 @@ void encode_unit(int* quant, int bitdepth, int stride, int stepSize, int partDep
     {
       int symbol = *(quant + rowidx * stride + colidx);
       encode_huffman(symbol, buffer);
-      fprintf(fptrEncTxt, "%s\n", (const char*)buffer);
+      fprintf(fptrEncTxt, "(%d, %d): %s\n", rowidx, colidx, (const char*)buffer);
       buffer += strlen(buffer);
     }
   }
