@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import pywt
 from pylab import cm
 from eval_RD import RDeval
+from decode import decode_full
 
 def run_compression(binImg: str, width: int, height: int, quantSize: int) -> tuple[float, float]:
     command = "./comp_demo " + binImg + " " + str(width) + " " + str(height) + " " + str(quantSize)
@@ -38,25 +39,6 @@ def load_binaries(width: int, height: int) -> tuple[np.ndarray, np.ndarray, np.n
     resi = np.reshape(list(struct.unpack('i'*num_pixel, buffer)), (width, height))
 
     return orig, reco, pred, resi, coeff
-
-def encode_fixlen(n: int, len: int) -> str:
-    res = ["0"] * len
-    i = 0
-    while (n > 0):
-        res[len - i - 1] = str(n % 2)
-        n = n // 2
-        i += 1
-    return "".join(res)
-
-def encode_huffman(n: int) -> str:
-    res = []
-    if (n == 0):
-        res.append('0')
-    else:
-        res = ["1"] * abs(n)
-        res.append('0')
-        res.append('0' if n < 0 else '1')
-    return "".join(res)
 
 def calc_entropy(message: np.ndarray):
     msg = message.flatten(order='C')
@@ -200,53 +182,49 @@ class DemoEncoding:
 
         run_compression(binImg, width, height, quantSize)
         orig, reco, pred, resi, coeff = load_binaries(width, height)
+        dec_depths, dec_preds, dec_coefs = decode_full("bitstream.bin", width, height, 128)
+        assert((dec_coefs == coeff).all())
 
-        #shape of the zoom window
-        wsx = 60
-        wsy = 60
-        verge = 5
-        totalx = 3 * verge + 2 * wsx
-        totaly = 3 * verge + 2 * wsy
+        symbols, counts = np.unique(np.abs(dec_coefs), return_counts=True)
+        data_huffman = dict(zip(symbols.astype(np.int32), counts))
+        symbols, counts = np.unique(orig // 8, return_counts=True) #kind of histogram style
+        data_fixlen = dict(zip(symbols.astype(np.int32), counts))
+        #print(data_huffman)
+        #print(data_fixlen)
+
         maxtrafo = np.max(np.abs(coeff))
-        fig, axs = plt.subplots(1, 2, figsize=(12, 8))
+        fig, axs = plt.subplots(2, 2, figsize=(12, 14))
 
-        x0 = 0
-        y0 = 0
         img1 = 255 * (orig - orig.min()) / np.ptp(orig)
-        img1[y0:(y0 + totaly), x0:(x0 + totalx)] = 255 * np.ones((totaly, totalx), dtype=int)
-        img1[(y0 + verge):(y0 + verge + wsy), (x0 + verge):(x0 + verge + wsx)] = orig[y0, x0] * np.ones((wsy, wsx), dtype=int)
-        img1[(y0 + 2 * verge + wsy):(y0 + 2 * verge + 2 * wsy), (x0 + verge):(x0 + verge + wsx)] = orig[y0 + 1, x0] * np.ones((wsy, wsx), dtype=int)
-        img1[(y0 + verge):(y0 + verge + wsy), (x0 + 2 * verge + wsx):(x0 + 2 * verge + 2 * wsx)] = orig[y0, x0 + 1] * np.ones((wsy, wsx), dtype=int)
-        img1[(y0 + 2 * verge + wsy):(y0 + 2 * verge + 2 * wsy), (x0 + 2 * verge + wsx):(x0 + 2 * verge + 2 * wsx)] = orig[y0 + 1, x0 + 1] * np.ones((wsy, wsx), dtype=int)
-        im1 = axs[0].matshow(img1, cmap=cm.gray)
-        axs[0].set_title("Original signal")
-        for i in range(4):
-            xt = x0 + (i % 2) * (wsx + verge) + verge
-            yt = y0 + (i // 2) * (wsy + verge) + verge + 30
-            axs[0].text(xt, yt, encode_fixlen(orig[y0 + (i // 2), x0 + (i % 2)], 8), ha="left", va="center", fontsize=6)
-        axs[0].xaxis.set_ticks([])
-        axs[0].yaxis.set_ticks([])
+        im1 = axs[0, 0].matshow(img1, cmap=cm.gray)
+        axs[0, 0].set_title("Original signal")
+        axs[0, 0].xaxis.set_ticks([])
+        axs[0, 0].yaxis.set_ticks([])
 
-        x0 = 64 - 1
-        y0 = 64 - 1
         img2 = np.abs(coeff)
-        img2[y0:(y0 + totaly), x0:(x0 + totalx)] = maxtrafo * np.ones((totaly, totalx), dtype=int)
-        img2[(y0 + verge):(y0 + verge + wsy), (x0 + verge):(x0 + verge + wsx)] = coeff[y0, x0] * np.ones((wsy, wsx), dtype=int)
-        img2[(y0 + 2 * verge + wsy):(y0 + 2 * verge + 2 * wsy), (x0 + verge):(x0 + verge + wsx)] = coeff[y0 + 1, x0] * np.ones((wsy, wsx), dtype=int)
-        img2[(y0 + verge):(y0 + verge + wsy), (x0 + 2 * verge + wsx):(x0 + 2 * verge + 2 * wsx)] = coeff[y0, x0 + 1] * np.ones((wsy, wsx), dtype=int)
-        img2[(y0 + 2 * verge + wsy):(y0 + 2 * verge + 2 * wsy), (x0 + 2 * verge + wsx):(x0 + 2 * verge + 2 * wsx)] = coeff[y0 + 1, x0 + 1] * np.ones((wsy, wsx), dtype=int)
-        im2 = axs[1].matshow(img2, cmap=cm.gray_r)
-        axs[1].set_title("Compressed signal")
-        for i in range(4):
-            xt = x0 + (i % 2) * (wsx + verge) + verge
-            yt = y0 + (i // 2) * (wsy + verge) + verge + 30
-            axs[1].text(xt, yt, encode_huffman(coeff[y0 + (i // 2), x0 + (i % 2)]), ha="left", va="center", fontsize=6)
-        axs[1].xaxis.set_ticks([])
-        axs[1].yaxis.set_ticks([])
+        im2 = axs[0, 1].matshow(img2, cmap=cm.gray_r)
+        axs[0, 1].set_title("Compressed signal")
+        for i in range(height // 128):
+            for j in range(width // 128):
+                ui = i * (width // 128) + j
+                xt = 15 + j * 128
+                yt = 15 + i * 128
+                axs[0, 1].text(xt, yt, "Split level: " + str(dec_depths[ui]), ha="left", va="center", fontsize=6)
+                axs[0, 1].text(xt, yt + 15, "Pred mode: " + str(dec_preds[ui]), ha="left", va="center", fontsize=6)
+        axs[0, 1].xaxis.set_ticks([])
+        axs[0, 1].yaxis.set_ticks([])
 
-        cbar = plt.colorbar(im1, ax=axs[0], ticks=[0, 256 / 16, 2 * 256 / 16, 255], orientation="vertical")
+        axs[1, 0].bar(range(len(data_fixlen)), list(data_fixlen.values()), align='center')
+        axs[1, 0].set_xticks(range(len(data_fixlen)), list(data_fixlen.keys()), rotation=65)
+        axs[1, 0].set_title("Symbol frequencies: Original values")
+
+        axs[1, 1].bar(range(len(data_huffman)), list(data_huffman.values()), align='center')
+        axs[1, 1].set_xticks(range(len(data_huffman)), list(data_huffman.keys()), rotation=65)
+        axs[1, 1].set_title("Symbol frequencies: Quantized values")
+
+        cbar = plt.colorbar(im1, ax=axs[0, 0], ticks=[0, 256 / 16, 2 * 256 / 16, 255], orientation="vertical")
         cbar.ax.set_yticklabels(["00000000", "00000001", "00000010", "11111111"])
-        cbar = plt.colorbar(im2, ax=axs[1], ticks=[0, maxtrafo / 16, 2 * maxtrafo / 16, maxtrafo], orientation="vertical")
+        cbar = plt.colorbar(im2, ax=axs[0, 1], ticks=[0, maxtrafo / 16, 2 * maxtrafo / 16, maxtrafo], orientation="vertical")
         cbar.ax.set_yticklabels(["0", "p10", "p110", "p" + (maxtrafo * "1") + "0"])
 
         if save_as == "":
