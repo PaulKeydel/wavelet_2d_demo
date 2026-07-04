@@ -283,11 +283,12 @@ void encode_unit(int* quant, int bitdepth, int stride, int stepSize, int partDep
   int numSegments = (binLen + 7) / 8;
   for (int seg = 0; seg < numSegments; seg++)
   {
-    char byteValue = 0;
+    unsigned char byteValue = 0;
     int blkLen = !(seg == numSegments - 1 && binLen % 8 > 0) ? 8 : binLen % 8;
+    int addShift = 8 - blkLen;
     for (int i = 0; i < blkLen; i++)
     {
-      byteValue += (1 << i) * (outStream[seg * 8 + blkLen - 1 - i] - '0');
+      byteValue += (1 << (i + addShift)) * (outStream[seg * 8 + blkLen - 1 - i] - '0');
     }
     fwrite((const void*)&byteValue, sizeof(char), 1, fptrEncBin);
   }
