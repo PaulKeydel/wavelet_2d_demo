@@ -188,9 +188,7 @@ class DemoEncoding:
         symbols, counts = np.unique(np.abs(dec_coefs), return_counts=True)
         data_huffman = dict(zip(symbols.astype(np.int32), counts))
         symbols, counts = np.unique(orig // 8, return_counts=True) #kind of histogram style
-        data_fixlen = dict(zip(symbols.astype(np.int32), counts))
-        #print(data_huffman)
-        #print(data_fixlen)
+        data_fixlen = dict(zip(symbols.astype(np.int32) * 8, counts))
 
         maxtrafo = np.max(np.abs(coeff))
         fig, axs = plt.subplots(2, 2, figsize=(12, 14))
@@ -207,25 +205,27 @@ class DemoEncoding:
         for i in range(height // 128):
             for j in range(width // 128):
                 ui = i * (width // 128) + j
-                xt = 15 + j * 128
-                yt = 15 + i * 128
-                axs[0, 1].text(xt, yt, "Split level: " + str(dec_depths[ui]), ha="left", va="center", fontsize=6)
-                axs[0, 1].text(xt, yt + 15, "Pred mode: " + str(dec_preds[ui]), ha="left", va="center", fontsize=6)
+                xt = 12 + j * 128
+                yt = 12 + i * 128
+                bin_depth = str((dec_depths[ui] >> 2) & 1) + str((dec_depths[ui] >> 1) & 1) + str(dec_depths[ui] & 1)
+                bin_pred = str((dec_preds[ui] >> 1) & 1) + str(dec_preds[ui] & 1)
+                axs[0, 1].text(xt, yt, "Split level: " + bin_depth + " (" + str(dec_depths[ui]) + ")", ha="left", va="center", fontsize=6)
+                axs[0, 1].text(xt, yt + 15, "Pred mode: " + bin_pred + " (" + str(dec_preds[ui]) + ")", ha="left", va="center", fontsize=6)
         axs[0, 1].xaxis.set_ticks([])
         axs[0, 1].yaxis.set_ticks([])
 
         axs[1, 0].bar(range(len(data_fixlen)), list(data_fixlen.values()), align='center')
-        axs[1, 0].set_xticks(range(len(data_fixlen)), list(data_fixlen.keys()), rotation=65)
+        axs[1, 0].set_xticks(list(range(len(data_fixlen)))[0::2], list(data_fixlen.keys())[0::2], rotation=65)
         axs[1, 0].set_title("Symbol frequencies: Original values")
 
         axs[1, 1].bar(range(len(data_huffman)), list(data_huffman.values()), align='center')
-        axs[1, 1].set_xticks(range(len(data_huffman)), list(data_huffman.keys()), rotation=65)
+        axs[1, 1].set_xticks(list(range(len(data_huffman)))[0::2], list(data_huffman.keys())[0::2], rotation=65)
         axs[1, 1].set_title("Symbol frequencies: Quantized values")
 
         cbar = plt.colorbar(im1, ax=axs[0, 0], ticks=[0, 256 / 16, 2 * 256 / 16, 255], orientation="vertical")
         cbar.ax.set_yticklabels(["00000000", "00000001", "00000010", "11111111"])
         cbar = plt.colorbar(im2, ax=axs[0, 1], ticks=[0, maxtrafo / 16, 2 * maxtrafo / 16, maxtrafo], orientation="vertical")
-        cbar.ax.set_yticklabels(["0", "p10", "p110", "p" + (maxtrafo * "1") + "0"])
+        cbar.ax.set_yticklabels(["0", "10[0/1]", "110[0/1]", (maxtrafo * "1") + "0[0/1]"])
 
         if save_as == "":
             plt.show()
