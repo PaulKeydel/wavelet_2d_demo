@@ -1,5 +1,6 @@
 #!/usr/local/bin/python3
 
+import os
 import subprocess
 from scipy.spatial import ConvexHull
 import numpy as np
@@ -13,10 +14,12 @@ class RDeval:
         lambdas = list()
         for quantSize in range(4, 25, 4):
             for lagrMult in range(25, 1550, 75):
-                command = "./comp_demo " + binImg + " " + str(width) + " " + str(height) + " " + str(quantSize) + " " + str(lagrMult)
+                os.chdir("comp_demo")
+                command = "./comp_demo ../" + binImg + " " + str(width) + " " + str(height) + " " + str(quantSize) + " " + str(lagrMult)
                 p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
                 (output, err) = p.communicate()
                 p.wait()
+                os.chdir("..")
                 output = output.decode("utf-8")
                 dist.append(float(output.split("\n")[1].split(" ")[-1]))
                 bitlen.append(float(output.split("\n")[2].split(" ")[-1]))

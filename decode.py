@@ -53,11 +53,13 @@ def decode_full(fname: str, width: int, height: int, unit_blk_size: int) -> tupl
 
 if __name__ == "__main__":
     for quantSize in range(4, 25, 4):
-        os.system("./comp_demo astronaut.bin 512 512 " + str(quantSize) + " > /dev/null")
+        os.chdir("comp_demo")
+        os.system("./comp_demo ../astronaut.bin 512 512 " + str(quantSize) + " > /dev/null")
+        os.chdir("..")
 
-        _, _, full_coef = decode_full("bitstream.bin", 512, 512, 128)
+        _, _, full_coef = decode_full("comp_demo/outputs/bitstream.bin", 512, 512, 128)
 
-        buffer = Path("coeffs.bin").read_bytes()
+        buffer = Path("comp_demo/outputs/coeffs.bin").read_bytes()
         coeff = np.reshape(list(struct.unpack('i'*(512 * 512), buffer)), (512, 512))
 
         print("Decoding succesful and valid?", (full_coef == coeff).all())

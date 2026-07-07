@@ -3,7 +3,7 @@
 code_length_dist() {
   for i in {1..5}
   do
-    num="$(grep -E "):\s\b\w{${i}}\b" bitstream.txt | wc -l)"
+    num="$(grep -E "):\s\b\w{${i}}\b" comp_demo/outputs/bitstream.txt | wc -l)"
     echo "Number of Huffman-coded coefficients that have length "$i":"
     echo "$num"
   done
@@ -14,7 +14,9 @@ if ! [[ -f ./astronaut.bin && -f ./camera.bin ]]; then
     python3 create_orig_img.py
 fi
 
+cd comp_demo
 make
+cd ..
 
 echo "What do you want to do?"
 echo "  (j)         Start Jupyter demo"

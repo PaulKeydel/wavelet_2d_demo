@@ -11,10 +11,12 @@ from eval_RD import RDeval
 from decode import decode_full
 
 def run_compression(binImg: str, width: int, height: int, quantSize: int) -> tuple[float, float]:
-    command = "./comp_demo " + binImg + " " + str(width) + " " + str(height) + " " + str(quantSize)
+    os.chdir("comp_demo")
+    command = "./comp_demo ../" + binImg + " " + str(width) + " " + str(height) + " " + str(quantSize)
     p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
     (output, err) = p.communicate()
     p.wait()
+    os.chdir("..")
     output = output.decode("utf-8")
     out_dist = float(output.split("\n")[1].split(" ")[-1])
     out_bitlen = float(output.split("\n")[2].split(" ")[-1])
@@ -23,19 +25,19 @@ def run_compression(binImg: str, width: int, height: int, quantSize: int) -> tup
 def load_binaries(width: int, height: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     num_pixel = width * height
     #read all binary files
-    buffer = Path("orig.bin").read_bytes()
+    buffer = Path("comp_demo/outputs/orig.bin").read_bytes()
     orig = np.reshape(list(struct.unpack('i'*num_pixel, buffer)), (width, height))
 
-    buffer = Path("reco.bin").read_bytes()
+    buffer = Path("comp_demo/outputs/reco.bin").read_bytes()
     reco = np.reshape(list(struct.unpack('i'*num_pixel, buffer)), (width, height))
 
-    buffer = Path("pred.bin").read_bytes()
+    buffer = Path("comp_demo/outputs/pred.bin").read_bytes()
     pred = np.reshape(list(struct.unpack('i'*num_pixel, buffer)), (width, height))
 
-    buffer = Path("coeffs.bin").read_bytes()
+    buffer = Path("comp_demo/outputs/coeffs.bin").read_bytes()
     coeff = np.reshape(list(struct.unpack('i'*num_pixel, buffer)), (width, height))
 
-    buffer = Path("resi.bin").read_bytes()
+    buffer = Path("comp_demo/outputs/resi.bin").read_bytes()
     resi = np.reshape(list(struct.unpack('i'*num_pixel, buffer)), (width, height))
 
     return orig, reco, pred, resi, coeff
@@ -182,7 +184,7 @@ class DemoEncoding:
 
         run_compression(binImg, width, height, quantSize)
         orig, reco, pred, resi, coeff = load_binaries(width, height)
-        dec_depths, dec_preds, dec_coefs = decode_full("bitstream.bin", width, height, 128)
+        dec_depths, dec_preds, dec_coefs = decode_full("comp_demo/outputs/bitstream.bin", width, height, 128)
         assert((dec_coefs == coeff).all())
 
         symbols, counts = np.unique(np.abs(dec_coefs), return_counts=True)
