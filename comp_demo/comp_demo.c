@@ -7,31 +7,7 @@
 #include "lib_enc_dec.h"
 
 
-void array_to_file(const char* fname, int* data, int len)
-{
-  FILE *fp = fopen(fname, "wb");
-  if(fp == NULL)
-  {
-    printf("error creating file");
-    exit(EXIT_FAILURE);
-  }
-  fwrite((const void*)data, sizeof(int), len, fp);
-  fclose(fp);
-}
-
-void array_from_file(const char* fname, int* data, int len)
-{
-  FILE *fp = fopen(fname, "rb");
-  if(fp == NULL)
-  {
-    printf("error opening file");
-    exit(EXIT_FAILURE);
-  }
-  fread((void*)data, sizeof(int), len, fp);
-  fclose(fp);
-}
-
-void compress(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int bitdepth, int stepSize, double lambda, unsigned long* totalBits, unsigned long* totalDist, FILE* fptrEncTxt, FILE* fptrEncBin)
+void compress(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int bitdepth, int stepSize, double lambda, unsigned long* totalBits, unsigned long* totalDist, uchar* byteStream, unsigned* binLen)
 {
   int numUnitsX = width / MAX_BLOCK_SIZE;
   int numUnitsY = height / MAX_BLOCK_SIZE;
@@ -101,8 +77,9 @@ void compress(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, i
       totalBits,
       totalDist
     );
-    encode_unit(quant + offset, bitdepth, width, stepSize, bestDepth, bestPred, fptrEncTxt, fptrEncBin);
+    *binLen += encode_unit(quant + offset, bitdepth, width, stepSize, bestDepth, bestPred, byteStream, *binLen);
   }
+  assert(*binLen % 8 == 0);
 }
 
 
@@ -128,8 +105,8 @@ int main(int argc, char **argv)
   int* reco     = (int*)malloc(width * height * sizeof(int));
 
   //load data and copy to orig.bin
-  array_from_file(argv[1], x, width * height);
-  array_to_file("outputs/orig.bin", x, width * height);
+  array_from_file(argv[1], (void*)x, sizeof(int), width * height);
+  array_to_file("outputs_enc/orig.bin", (const void*)x, sizeof(int), width * height);
 
   //estimate bit-depth and QP value
   int bitdepth = calcBitdepth(x, width * height);
@@ -140,11 +117,15 @@ int main(int argc, char **argv)
   unsigned long totalBits = 0UL;
   unsigned long totalDist = 0UL;
 
-  //output text file for resulting bitstream
-  FILE* fptrEncTxt = fopen("outputs/bitstream.txt", "w");
-  FILE* fptrEncBin = fopen("outputs/bitstream.bin", "wb");
+  //buffer for resulting bitstream
+  int maxQuant      = (1 << (bitdepth + 1 - QP)) - 1;
+  int numUnits      = (width / MAX_BLOCK_SIZE) * (height / MAX_BLOCK_SIZE);
+  int numBytes      = (32 + 5 * numUnits + (maxQuant + 2) * MAX_BLOCK_SIZE * MAX_BLOCK_SIZE) / 8;
+  uchar* byteStream = (uchar*)malloc(numBytes);
+  memset(byteStream, 0, numBytes);
 
   //find RD-optimized compression mode and do compression + encoding
+  unsigned binLen = encode_coding_params(width, height, stepSize, byteStream, 0);
   compress(
     x,
     pred,
@@ -159,26 +140,24 @@ int main(int argc, char **argv)
     lambda,
     &totalBits,
     &totalDist,
-    fptrEncTxt,
-    fptrEncBin
+    byteStream,
+    &binLen
   );
   //check quantization output in terms of bitdepth
   assert(calcBitdepth(quant, width * height) <= bitdepth + 1 - QP);
 
   //safe everything to files
-  array_to_file("outputs/pred.bin", pred, width * height);
-  array_to_file("outputs/resi.bin", resi, width * height);
-  array_to_file("outputs/coeffs.bin", quant, width * height);
-  array_to_file("outputs/reco.bin", reco, width * height);
-
-  //free file buffer
-  fclose(fptrEncTxt);
-  fclose(fptrEncBin);
+  array_to_file("outputs_enc/pred.bin", (const void*)pred, sizeof(int), width * height);
+  array_to_file("outputs_enc/resi.bin", (const void*)resi, sizeof(int), width * height);
+  array_to_file("outputs_enc/coeffs.bin", (const void*)quant, sizeof(int), width * height);
+  array_to_file("outputs_enc/reco.bin", (const void*)reco, sizeof(int), width * height);
+  array_to_file("outputs_enc/bitstream.bin", (const void*)byteStream, sizeof(uchar), binLen / 8);
 
   printf("Relative distortion (MSE): %f\n", (double)totalDist / (double)(width * height));
   printf("Average symbol length (Bits): %f\n", (double)totalBits / (double)(width * height));
   printf("Compression rate: %f\n", 1.0 - (double)totalBits / (double)(bitdepth * width * height));
 
+  free(byteStream);
   free(x);
   free(pred);
   free(resi);

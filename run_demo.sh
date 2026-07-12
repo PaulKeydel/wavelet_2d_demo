@@ -1,14 +1,5 @@
 #!/bin/bash
 
-code_length_dist() {
-  for i in {1..5}
-  do
-    num="$(grep -E "):\s\b\w{${i}}\b" comp_demo/outputs/bitstream.txt | wc -l)"
-    echo "Number of Huffman-coded coefficients that have length "$i":"
-    echo "$num"
-  done
-}
-
 if ! [[ -f ./astronaut.bin && -f ./camera.bin ]]; then
     echo "Creating demo images..."
     python3 create_orig_img.py
@@ -39,8 +30,7 @@ elif [ "$choice" = "c" ]; then
     ./eval_RD.py
 elif [ "$choice" = "b" ]; then
     #decode and validate bitstream
-    echo "Symbol stats and validation check..."
-    code_length_dist
+    echo "Check if decoder matches encoder..."
     python3 decode.py
 else
     echo "Invalid choice!"

@@ -1,28 +1,39 @@
 CC=gcc
 CFLAGS=-c
 LFLAGS=
-TARGET=comp_demo
+TARGET1=comp_demo
+TARGET2=reco_demo
 
 OBJDIR=obj
+OUTDIR=outputs_enc outputs_dec
 
-SRCS=$(wildcard *.c)
+SRCS:=$(wildcard *.c)
+SRCS:=$(filter-out $(TARGET1).c, $(SRCS))
+SRCS:=$(filter-out $(TARGET2).c, $(SRCS))
 OBJS=$(patsubst %.c,$(OBJDIR)/%.o,$(SRCS))
 
-all: $(TARGET)
+all: $(TARGET1) $(TARGET2)
 
 debug: CFLAGS += -g -Wall
-debug: $(TARGET)
+debug: $(TARGET1) $(TARGET2)
 
-$(OBJDIR)/%.o: %.c | obj
-	$(CC) $(CFLAGS) $< -o $@
+$(OBJDIR)/%.o: %.c | $(OBJDIR) $(OUTDIR)
+	$(CC) $(CFLAGS) $? -o $@
 
-$(TARGET): $(OBJS)
+$(TARGET1): $(TARGET1).o $(OBJS)
 	$(CC) $^ $(LFLAGS) -o $@
 
-obj:
+$(TARGET2): $(TARGET2).o $(OBJS)
+	$(CC) $^ $(LFLAGS) -o $@
+
+$(OBJDIR):
 	mkdir -p $@
-	mkdir -p outputs
+
+$(OUTDIR):
+	mkdir -p $@
 
 clean:
 	rm -r $(OBJDIR)
-	rm $(TARGET)
+	rm -r $(OUTDIR)
+	rm $(TARGET1)
+	rm $(TARGET2)

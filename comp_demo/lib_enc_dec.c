@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 #include <math.h>
 #include "lib_enc_dec.h"
@@ -45,6 +44,30 @@ void blkcpy(int* src, int* dst, int width, int height, int stride)
   {
     memcpy(dst + rowidx * stride, src + rowidx * stride, width * sizeof(int));
   }
+}
+
+void array_to_file(const char* fname, const void* data, int typeSize, int len)
+{
+  FILE* fp = fopen(fname, "wb");
+  if(fp == NULL)
+  {
+    printf("error creating file");
+    exit(EXIT_FAILURE);
+  }
+  fwrite(data, typeSize, len, fp);
+  fclose(fp);
+}
+
+void array_from_file(const char* fname, void* data, int typeSize, int len)
+{
+  FILE* fp = fopen(fname, "rb");
+  if(fp == NULL)
+  {
+    printf("Error opening file");
+    exit(EXIT_FAILURE);
+  }
+  fread(data, typeSize, len, fp);
+  fclose(fp);
 }
 
 void predict(int predMode, int* reco, int* dst, int* resi, int width, int height, int stride, bool hasLeft, bool hasTop, int bitdepth)
@@ -194,24 +217,16 @@ void dequantize(int* src, int width, int height, int stride, int quantsize)
   }
 }
 
-unsigned long coded_bits(int* x, int width, int height, int stride, int bitdepth, int Qp)
+unsigned long coded_bits_coeff(int* x, int width, int height, int stride)
 {
   unsigned long bits = 0UL;
-#if LL_FIXED_LENGTH
-  //fixed length coding for the LL band
-  int trafoBD = bitdepth + 1 - Qp;
-  bits = (height / 2) * (width / 2) * (unsigned long)trafoBD;
-#endif
-  //Huffman coding depending on LL_FIXED_LENGTH: all four subbands or the three details bands only
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      if ((rowidx >= height/2 || colidx >= width/2) || !LL_FIXED_LENGTH)
-      {
-        int absVal = abs(x[rowidx * stride + colidx]);
-        bits += (unsigned long)(absVal == 0 ? 1 : absVal + 2);
-      }
+      //Huffman coding all four subbands
+      int absVal = abs(x[rowidx * stride + colidx]);
+      bits += (unsigned long)(absVal == 0 ? 1 : absVal + 2);
     }
   }
   return bits;
@@ -230,87 +245,134 @@ unsigned long mse_dist(int* src, int* reco, int width, int height, int stride)
   return dist;
 }
 
-void encode_fixlen(int n, int len, char* bitsOut)
+unsigned encode_fixlen(int n, int len, uchar* bitsOut, int bitPos)
 {
   assert(len >= calcBitdepth(&n, 1));
-  memset(bitsOut, '0', len);
+  for (int i = 0; i < len; i++)
+  {
+    setBit(bitsOut, (bitPos + i), 0);
+  }
   int i = 0;
   while (n > 0)
   {
-    bitsOut[len - i - 1] = (n % 2) + '0';
+    setBit(bitsOut, (bitPos + len - i - 1), (n % 2));
     n = n / 2;
     i++;
   }
-  bitsOut[len] = '\0';
+  return len;
 }
 
-void encode_huffman(int n, char* bitsOut)
+unsigned decode_fixlen(int len, uchar* bitsIn, int bitPos, int* n)
+{
+  *n = 0;
+  for (int i = 0; i < len; i++)
+  {
+    *n += checkBit(bitsIn, (bitPos + len - 1 - i)) * (1 << i);
+  }
+  return len;
+}
+
+unsigned encode_huffman(int n, uchar* bitsOut, int bitPos)
 {
   unsigned bitlen = (unsigned)(abs(n) + 1 + (n != 0));
   if (n == 0)
   {
-    bitsOut[0] = '0';
-    bitsOut[1] = '\0';
+    setBit(bitsOut, bitPos, 0);
   }
   else
   {
-    memset(bitsOut, '1', bitlen - 2);
-    bitsOut[bitlen - 2] = '0';
-    bitsOut[bitlen - 1] = n < 0 ? '0' : '1';
-    bitsOut[bitlen] = '\0';
+    for (int i = 0; i < bitlen - 2; i++)
+    {
+      setBit(bitsOut, (bitPos + i), 1);
+    }
+    setBit(bitsOut, (bitPos + bitlen - 2), 0);
+    setBit(bitsOut, (bitPos + bitlen - 1), (n < 0 ? 0 : 1));
   }
+  return bitlen;
 }
 
-void encode_unit(int* quant, int bitdepth, int stride, int stepSize, int partDepth, int predMode, FILE* fptrEncTxt, FILE* fptrEncBin)
+unsigned decode_huffman(uchar* bitsIn, int bitPos, int* n)
 {
-  int QP = calcBitdepth(&stepSize, 1) - 1;
-  int quantBD = bitdepth + 1 - QP;
-  
-  int nBuf = MAX_BLOCK_SIZE * MAX_BLOCK_SIZE;
-  int maxBits = (1 << quantBD) - 1 + 2; //the +2 because of sign bit and the trailing separator bit
-  char* outStream = (char*)malloc((3 + 1) + (2 + 1) + (nBuf * maxBits + 1));
-  char* buffer = outStream;
+  int i = 0;
+  while (checkBit(bitsIn, (bitPos + i)) != 0)
+  {
+    i++;
+  }
+  unsigned bitlen = 0U;
+  if (i == 0) //no leading ones
+  {
+    *n = 0;
+    bitlen = 1U;
+  }
+  else
+  {
+    *n = i * (checkBit(bitsIn, (bitPos + i + 1)) == 0 ? -1 : 1);
+    bitlen = (unsigned)i + 2U;
+  }
+  return bitlen;
+}
 
-  encode_fixlen(partDepth, 3, buffer);
-  fprintf(fptrEncTxt, "split depth: %s\n", (const char*)buffer);
-  buffer += strlen(buffer);
+unsigned encode_coding_params(int width, int height, int stepSize, uchar* bitsOut, int bitPos)
+{
+  encode_fixlen(width, 12, bitsOut, bitPos);
+  encode_fixlen(height, 12, bitsOut, bitPos + 12);
+  encode_fixlen(stepSize, 8, bitsOut, bitPos + 24);
+  return 32;
+}
 
-  encode_fixlen(predMode, 2, buffer);
-  fprintf(fptrEncTxt, "pred mode: %s\n", (const char*)buffer);
-  buffer += strlen(buffer);
+unsigned decode_coding_params(uchar* bitsIn, int bitPos, int* width, int* height, int* stepSize)
+{
+  decode_fixlen(12, bitsIn, bitPos, width);
+  decode_fixlen(12, bitsIn, bitPos + 12, height);
+  decode_fixlen(8, bitsIn, bitPos + 24, stepSize);
+  return 32;
+}
+
+unsigned encode_unit(int* quant, int bitdepth, int stride, int stepSize, int partDepth, int predMode, uchar* binStream, int bitPos)
+{
+  unsigned binLen = 0;
+  binLen +=encode_fixlen(partDepth, 3, binStream, bitPos + binLen);
+  binLen +=encode_fixlen(predMode, 2, binStream, bitPos + binLen);
 
   for (int rowidx = 0; rowidx < MAX_BLOCK_SIZE; rowidx++)
   {
     for (int colidx = 0; colidx < MAX_BLOCK_SIZE; colidx++)
     {
       int symbol = *(quant + rowidx * stride + colidx);
-      encode_huffman(symbol, buffer);
-      fprintf(fptrEncTxt, "(%d, %d): %s\n", rowidx, colidx, (const char*)buffer);
-      buffer += strlen(buffer);
+      binLen += encode_huffman(symbol, binStream, bitPos + binLen);
     }
   }
-
-  int binLen = strlen(outStream);
-  int numSegments = (binLen + 7) / 8;
-  for (int seg = 0; seg < numSegments; seg++)
+  if (binLen % 8 > 0)
   {
-    unsigned char byteValue = 0;
-    int blkLen = !(seg == numSegments - 1 && binLen % 8 > 0) ? 8 : binLen % 8;
-    int addShift = 8 - blkLen;
-    for (int i = 0; i < blkLen; i++)
-    {
-      byteValue += (1 << (i + addShift)) * (outStream[seg * 8 + blkLen - 1 - i] - '0');
-    }
-    fwrite((const void*)&byteValue, sizeof(char), 1, fptrEncBin);
+    binLen += (8 - (binLen % 8));
   }
+  return binLen;
+}
 
-  free(outStream);
+unsigned decode_unit(uchar* binStream, int bitPos, int* quant, int stride, int* partDepth, int* predMode)
+{
+  unsigned binLen = 0;
+  binLen += decode_fixlen(3, binStream, bitPos + 0, partDepth);
+  binLen += decode_fixlen(2, binStream, bitPos + 3, predMode);
+
+  for (int rowidx = 0; rowidx < MAX_BLOCK_SIZE; rowidx++)
+  {
+    for (int colidx = 0; colidx < MAX_BLOCK_SIZE; colidx++)
+    {
+      binLen += decode_huffman(binStream, bitPos + binLen, quant + rowidx * stride + colidx);
+    }
+  }
+  if (binLen % 8 != 0)
+  {
+    binLen += 8 - (binLen % 8);
+  }
+  assert(binLen % 8 == 0);
+  return binLen;
 }
 
 void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin, unsigned long* bits, unsigned long* dist)
 {
-  //calculate QP value and adjust quantization step-size (due to different transform scalings)
-  int QP = calcBitdepth(&stepSize, 1) - 1;
+  //adjust quantization step-size (due to different transform scalings)
 #if TRANSFORM_SKIP || USE_TAUBMANN
   int quantSize = stepSize;
 #else
@@ -360,7 +422,7 @@ void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* re
     blkcpy(currTrafo, currQuant, blkWidth, blkHeight, stride);
 #endif
     quantize(currQuant, blkWidth, blkHeight, stride, quantSize);
-    *bits += coded_bits(currQuant, blkWidth, blkHeight, stride, bitdepth, QP);
+    *bits += coded_bits_coeff(currQuant, blkWidth, blkHeight, stride);
     blkcpy(currQuant, currReco, blkWidth, blkHeight, stride);
     //decompression
     dequantize(currReco, blkWidth, blkHeight, stride, quantSize);
@@ -369,5 +431,52 @@ void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* re
 #endif
     predict(predMode, currReco, NULL, NULL, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
     *dist += mse_dist(currOrig, currReco, blkWidth, blkHeight, stride);
+  }
+}
+
+void reconstruct_unit(int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin)
+{
+  //adjust quantization step-size (due to different transform scalings)
+#if TRANSFORM_SKIP || USE_TAUBMANN
+  int quantSize = stepSize;
+#else
+  int quantSize = stepSize << 1;
+#endif
+
+  int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
+  int blkHeight = MAX_BLOCK_SIZE >> partDepth;
+  int blkStride = 1 << partDepth;
+  int blkNum    = (1 << partDepth) * (1 << partDepth);
+  for (int subblk = 0; subblk < blkNum; subblk++)
+  {
+    bool hasLeft = true;
+    bool hasTop = true;
+    if (subblk == 0)
+    {
+      hasLeft = leftMargin;
+      hasTop = topMargin;
+    }
+    else if (subblk / blkStride == 0)
+    {
+      hasLeft = true;
+      hasTop = topMargin;
+    }
+    else if (subblk % blkStride == 0)
+    {
+      hasLeft = leftMargin;
+      hasTop = true;
+    }
+
+    int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;
+    int* currQuant = quant + offset;
+    int* currReco = reco + offset;
+
+    //decompression
+    blkcpy(currQuant, currReco, blkWidth, blkHeight, stride);
+    dequantize(currReco, blkWidth, blkHeight, stride, quantSize);
+#if !TRANSFORM_SKIP
+    inv_transform(currReco, blkWidth, blkHeight, stride, bitdepth + 1);
+#endif
+    predict(predMode, currReco, NULL, NULL, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
   }
 }
