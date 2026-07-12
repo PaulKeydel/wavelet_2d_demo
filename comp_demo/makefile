@@ -12,18 +12,19 @@ SRCS:=$(filter-out $(TARGET1).c, $(SRCS))
 SRCS:=$(filter-out $(TARGET2).c, $(SRCS))
 OBJS=$(patsubst %.c,$(OBJDIR)/%.o,$(SRCS))
 
+.PHONY: debug
+debug: CFLAGS += -g -Wall
+debug: all
+
 all: $(TARGET1) $(TARGET2)
 
-debug: CFLAGS += -g -Wall
-debug: $(TARGET1) $(TARGET2)
-
 $(OBJDIR)/%.o: %.c | $(OBJDIR) $(OUTDIR)
-	$(CC) $(CFLAGS) $? -o $@
+	$(CC) $(CFLAGS) $< -o $@
 
-$(TARGET1): $(TARGET1).o $(OBJS)
+$(TARGET1): $(OBJDIR)/$(TARGET1).o $(OBJS)
 	$(CC) $^ $(LFLAGS) -o $@
 
-$(TARGET2): $(TARGET2).o $(OBJS)
+$(TARGET2): $(OBJDIR)/$(TARGET2).o $(OBJS)
 	$(CC) $^ $(LFLAGS) -o $@
 
 $(OBJDIR):
@@ -32,6 +33,7 @@ $(OBJDIR):
 $(OUTDIR):
 	mkdir -p $@
 
+.PHONY: clean
 clean:
 	rm -r $(OBJDIR)
 	rm -r $(OUTDIR)
