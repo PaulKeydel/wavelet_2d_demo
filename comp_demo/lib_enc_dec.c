@@ -78,19 +78,19 @@ void predict(int predMode, int* reco, int* dst, int* resi, int width, int height
     for (int colidx = 0; colidx < width; colidx++)
     {
       int pred = 0;
-      if (predMode == 0)
+      if (predMode == PRED_CONST)
       {
         pred = defaultPred;
       }
-      else if (predMode == 1)
+      else if (predMode == PRED_HOR)
       {
         pred = hasLeft ? reco[rowidx * stride - 1] : defaultPred;
       }
-      else if (predMode == 2)
+      else if (predMode == PRED_VER)
       {
         pred = hasTop ? reco[colidx - stride] : defaultPred;
       }
-      else if (predMode == 3)
+      else if (predMode == PRED_DIAG)
       {
         pred = ((hasLeft ? reco[rowidx * stride - 1] : defaultPred) + (hasTop ? reco[colidx - stride] : defaultPred)) >> 1;
       }
@@ -114,19 +114,6 @@ void predict(int predMode, int* reco, int* dst, int* resi, int width, int height
 
 void transform(int* src, int width, int height, int stride, int bitdepthIn)
 {
-#if !USE_TAUBMANN
-  //filter set sqrt(2):sqrt(2) normalization
-  double h_syn[7] = { -0.064538, -0.040688, 0.418091,  0.788485, 0.418091, -0.040688, -0.064538 };
-  double g_ana[7] = { -0.064538,  0.040688, 0.418091, -0.788485, 0.418091,  0.040688, -0.064538 };
-  double h_ana[9] = {  0.037827, -0.023849, -0.110624, 0.377403,  0.852699, 0.377403, -0.110624, -0.023849,  0.037827 };
-  double g_syn[9] = { -0.037827, -0.023849,  0.110624, 0.377403, -0.852699, 0.377403,  0.110624, -0.023849, -0.037827 };
-#else
-  //Taubmann:
-  double h_syn[7] = { -0.091270, -0.057542,  0.591270, 1.115086,  0.591270, -0.057542, -0.091270 };
-  double g_ana[7] = { 0.045635, -0.028771, -0.295635, 0.557543, -0.295635, -0.028771,  0.045635 };
-  double h_ana[9] = { 0.026748, -0.016864, -0.078223,  0.266864, 0.602949,  0.266864, -0.078223, -0.016864, 0.026748 };
-  double g_syn[9] = { 0.053496,  0.033728, -0.156446, -0.533728, 1.205898, -0.533728, -0.156446,  0.033728, 0.053496 };
-#endif
   double* dsrc = (double*)malloc(width * height * sizeof(double));
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
@@ -136,7 +123,7 @@ void transform(int* src, int width, int height, int stride, int bitdepthIn)
     }
   }
 #if USE_TAUBMANN
-  convWT_2d(h_ana, 9, g_ana, 7, dsrc, width, height, width);
+  convWT_2d(&FilterTaubmann, dsrc, width, height, width);
   int clipMin = -(1 << (bitdepthIn - 1)) + 1;
   int clipMax = (1 << (bitdepthIn - 1)) - 1;
 #else
@@ -156,19 +143,6 @@ void transform(int* src, int width, int height, int stride, int bitdepthIn)
 
 void inv_transform(int* src, int width, int height, int stride, int bitdepthOut)
 {
-#if !USE_TAUBMANN
-  //filter set sqrt(2):sqrt(2) normalization
-  double h_syn[7] = { -0.064538, -0.040688, 0.418091,  0.788485, 0.418091, -0.040688, -0.064538 };
-  double g_ana[7] = { -0.064538,  0.040688, 0.418091, -0.788485, 0.418091,  0.040688, -0.064538 };
-  double h_ana[9] = {  0.037827, -0.023849, -0.110624, 0.377403,  0.852699, 0.377403, -0.110624, -0.023849,  0.037827 };
-  double g_syn[9] = { -0.037827, -0.023849,  0.110624, 0.377403, -0.852699, 0.377403,  0.110624, -0.023849, -0.037827 };
-#else
-  //Taubmann:
-  double h_syn[7] = { -0.091270, -0.057542,  0.591270, 1.115086,  0.591270, -0.057542, -0.091270 };
-  double g_ana[7] = { 0.045635, -0.028771, -0.295635, 0.557543, -0.295635, -0.028771,  0.045635 };
-  double h_ana[9] = { 0.026748, -0.016864, -0.078223,  0.266864, 0.602949,  0.266864, -0.078223, -0.016864, 0.026748 };
-  double g_syn[9] = { 0.053496,  0.033728, -0.156446, -0.533728, 1.205898, -0.533728, -0.156446,  0.033728, 0.053496 };
-#endif
   double* dsrc = (double*)malloc(width * height * sizeof(double));
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
@@ -178,7 +152,7 @@ void inv_transform(int* src, int width, int height, int stride, int bitdepthOut)
     }
   }
 #if USE_TAUBMANN
-  invconvWT_2d(h_syn, 7, g_syn, 9, dsrc, width, height, width);
+  invconvWT_2d(&FilterTaubmann, dsrc, width, height, width);
 #else
   ilwt97_2d(dsrc, width, height, width);
 #endif
@@ -298,17 +272,12 @@ unsigned decode_huffman(uchar* bitsIn, int bitPos, int* n)
   {
     i++;
   }
-  unsigned bitlen = 0U;
-  if (i == 0) //no leading ones
+  *n = i;
+  if (i > 0)
   {
-    *n = 0;
-    bitlen = 1U;
+    *n *= (checkBit(bitsIn, (bitPos + i + 1)) == 0 ? -1 : 1);
   }
-  else
-  {
-    *n = i * (checkBit(bitsIn, (bitPos + i + 1)) == 0 ? -1 : 1);
-    bitlen = (unsigned)i + 2U;
-  }
+  unsigned bitlen = (i == 0 ? 1U : (unsigned)i + 2U);
   return bitlen;
 }
 
@@ -394,13 +363,11 @@ void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
     }
     else if (subblk / blkStride == 0)
     {
-      hasLeft = true;
       hasTop = topMargin;
     }
     else if (subblk % blkStride == 0)
     {
       hasLeft = leftMargin;
-      hasTop = true;
     }
 
     int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;

@@ -40,10 +40,6 @@ void reconstruct(int* quant, int* reco, int width, int height, int stepSize, uch
     int offset = (ui / numUnitsX) * MAX_BLOCK_SIZE * width + (ui % numUnitsX) * MAX_BLOCK_SIZE;
 
     *binLen += decode_unit(byteStream, *binLen, quant + offset, width, &bestDepth, &bestPred);
-
-    printf("pred: %d\n", bestPred);
-    printf("splits: %d\n", bestDepth);
-
     reconstruct_unit(quant + offset, reco + offset, width, stepSize, bestDepth, bestPred, topMargin, leftMargin);
   }
 }
@@ -68,8 +64,8 @@ int main(int argc, char **argv)
 
   unsigned binLen = decode_coding_params(byteStream, 0, &width, &height, &stepSize);
 
-  int* quant    = (int*)malloc(width * height * sizeof(int));
-  int* reco     = (int*)malloc(width * height * sizeof(int));
+  int* quant = (int*)malloc(width * height * sizeof(int));
+  int* reco  = (int*)malloc(width * height * sizeof(int));
 
   reconstruct(quant, reco, width, height, stepSize, byteStream, &binLen);
 

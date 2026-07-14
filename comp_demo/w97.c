@@ -2,11 +2,10 @@
 #include <math.h>
 #include "w97.h"
 
-double* tempbank = 0;
 
 void convWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLength, double* signal, int n, int stride)
 {
-  tempbank = (double*)malloc(n * sizeof(double));
+  double* tempbank = (double*)malloc(n * sizeof(double));
   int i,idx,k;
   for (i = 0; i < n; i++)
   {
@@ -32,8 +31,12 @@ void convWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLeng
   free(tempbank);
 }
 
-void convWT_2d(double* ScalingFilter, int hLength, double* WaveletFilter, int gLength, double* x, int width, int height, int stride)
+void convWT_2d(FilterSet* filters, double* x, int width, int height, int stride)
 {
+  double* ScalingFilter = filters->h_ana;
+  int hLength = 9;
+  double* WaveletFilter = filters->g_ana;
+  int gLength = 7;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     convWT(ScalingFilter, hLength, WaveletFilter, gLength, x + rowidx * stride, width, 1);
@@ -46,7 +49,7 @@ void convWT_2d(double* ScalingFilter, int hLength, double* WaveletFilter, int gL
 
 void invconvWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLength, double* trafo, int n, int stride)
 {
-  tempbank = (double*)malloc(n * sizeof(double));
+  double* tempbank = (double*)malloc(n * sizeof(double));
   int i,idx,k;
   for (i = 0; i < n; i++)
   {
@@ -75,8 +78,12 @@ void invconvWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gL
   free(tempbank);
 }
 
-void invconvWT_2d(double* ScalingFilter, int hLength, double* WaveletFilter, int gLength, double* x, int width, int height, int stride)
+void invconvWT_2d(FilterSet* filters, double* x, int width, int height, int stride)
 {
+  double* ScalingFilter = filters->h_syn;
+  int hLength = 7;
+  double* WaveletFilter = filters->g_syn;
+  int gLength = 9;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     invconvWT(ScalingFilter, hLength, WaveletFilter, gLength, x + rowidx * stride, width, 1);
@@ -134,7 +141,7 @@ void lwt97(double* x, int n, int stride)
   }
   
   //pack
-  tempbank = (double *)malloc(n*sizeof(double));
+  double* tempbank = (double *)malloc(n*sizeof(double));
   for (i = 0; i < n; i++)
   {
     if (i%2 == 0) tempbank[i/2] = x[i*stride];
@@ -162,7 +169,7 @@ void ilwt97(double* x, int n, int stride)
   int i;
   
   //unpack
-  tempbank = (double *)malloc(n*sizeof(double));
+  double* tempbank = (double *)malloc(n*sizeof(double));
   for (i = 0; i < n/2; i++)
   {
     tempbank[i*2] = x[i*stride];

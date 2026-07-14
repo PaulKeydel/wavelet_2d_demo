@@ -9,6 +9,13 @@ typedef unsigned char uchar;
 #define MAX_BLOCK_SIZE  128
 #define TRANSFORM_SKIP  0
 
+//prediction modes
+#define PRED_CONST   0
+#define PRED_HOR     1
+#define PRED_VER     2
+#define PRED_DIAG    3
+#define NUM_PREDS    4
+
 //macros for bit manipulation on unsigned char array
 #define setBit(arr,k,val) ( arr[(k/8)] = (val == 1) ? arr[(k/8)] | (1 << (7 - (k%8))) : arr[(k/8)] & ~(1 << (7 - (k%8))) )
 #define checkBit(arr,k)   ( (arr[(k/8)] >> (7 - (k%8))) & 1 )
