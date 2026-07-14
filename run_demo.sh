@@ -6,7 +6,7 @@ if ! [[ -f ./astronaut.bin && -f ./camera.bin ]]; then
 fi
 
 cd comp_demo
-make
+make all
 cd ..
 
 echo "What do you want to do?"

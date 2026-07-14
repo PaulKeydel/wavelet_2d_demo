@@ -44,7 +44,7 @@ void reconstruct(int* quant, int* reco, int width, int height, int stepSize, uch
     printf("pred: %d\n", bestPred);
     printf("splits: %d\n", bestDepth);
 
-    reconstruct_unit(quant + offset, reco + offset, 8, width, stepSize, bestDepth, bestPred, topMargin, leftMargin);
+    reconstruct_unit(quant + offset, reco + offset, width, stepSize, bestDepth, bestPred, topMargin, leftMargin);
   }
 }
 

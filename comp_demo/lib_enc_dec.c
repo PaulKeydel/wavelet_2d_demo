@@ -328,7 +328,7 @@ unsigned decode_coding_params(uchar* bitsIn, int bitPos, int* width, int* height
   return 32;
 }
 
-unsigned encode_unit(int* quant, int bitdepth, int stride, int stepSize, int partDepth, int predMode, uchar* binStream, int bitPos)
+unsigned encode_unit(int* quant, int stride, int partDepth, int predMode, uchar* binStream, int bitPos)
 {
   unsigned binLen = 0;
   binLen +=encode_fixlen(partDepth, 3, binStream, bitPos + binLen);
@@ -370,7 +370,7 @@ unsigned decode_unit(uchar* binStream, int bitPos, int* quant, int stride, int* 
   return binLen;
 }
 
-void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin, unsigned long* bits, unsigned long* dist)
+void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin)
 {
   //adjust quantization step-size (due to different transform scalings)
 #if TRANSFORM_SKIP || USE_TAUBMANN
@@ -378,7 +378,6 @@ void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* re
 #else
   int quantSize = stepSize << 1;
 #endif
-
   //split and for each subblock do first compression and then decompression
   int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
   int blkHeight = MAX_BLOCK_SIZE >> partDepth;
@@ -405,78 +404,42 @@ void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* re
     }
 
     int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;
-    int* currOrig = x + offset;
-    int* currPred = pred + offset;
-    int* currResi = resi + offset;
-    int* currTrafo = trafo + offset;
     int* currQuant = quant + offset;
     int* currReco = reco + offset;
     //compression: prediction, 9/7 transformtion and quatization
-    blkcpy(currOrig, currResi, blkWidth, blkHeight, stride);
-    predict(predMode, currReco, currPred, currResi, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
+    if (x != NULL && pred != NULL && resi != NULL && trafo != NULL)
+    {
+      int* currOrig = x + offset;
+      int* currPred = pred + offset;
+      int* currResi = resi + offset;
+      int* currTrafo = trafo + offset;
+      blkcpy(currOrig, currResi, blkWidth, blkHeight, stride);
+      predict(predMode, currReco, currPred, currResi, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
 #if TRANSFORM_SKIP
-    blkcpy(currResi, currQuant, blkWidth, blkHeight, width);
+      blkcpy(currResi, currQuant, blkWidth, blkHeight, width);
 #else
-    blkcpy(currResi, currTrafo, blkWidth, blkHeight, stride);
-    transform(currTrafo, blkWidth, blkHeight, stride, bitdepth + 1);
-    blkcpy(currTrafo, currQuant, blkWidth, blkHeight, stride);
+      blkcpy(currResi, currTrafo, blkWidth, blkHeight, stride);
+      transform(currTrafo, blkWidth, blkHeight, stride, bitdepth + 1);
+      blkcpy(currTrafo, currQuant, blkWidth, blkHeight, stride);
 #endif
-    quantize(currQuant, blkWidth, blkHeight, stride, quantSize);
-    *bits += coded_bits_coeff(currQuant, blkWidth, blkHeight, stride);
-    blkcpy(currQuant, currReco, blkWidth, blkHeight, stride);
+      quantize(currQuant, blkWidth, blkHeight, stride, quantSize);
+    }
     //decompression
+    blkcpy(currQuant, currReco, blkWidth, blkHeight, stride);
     dequantize(currReco, blkWidth, blkHeight, stride, quantSize);
 #if !TRANSFORM_SKIP
     inv_transform(currReco, blkWidth, blkHeight, stride, bitdepth + 1);
 #endif
     predict(predMode, currReco, NULL, NULL, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
-    *dist += mse_dist(currOrig, currReco, blkWidth, blkHeight, stride);
   }
 }
 
-void reconstruct_unit(int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin)
+void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin)
 {
-  //adjust quantization step-size (due to different transform scalings)
-#if TRANSFORM_SKIP || USE_TAUBMANN
-  int quantSize = stepSize;
-#else
-  int quantSize = stepSize << 1;
-#endif
+  comp_reco_unit(x, pred, resi, trafo, quant, reco, IMG_BITDEPTH, stride, stepSize, partDepth, predMode, topMargin, leftMargin);
+}
 
-  int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
-  int blkHeight = MAX_BLOCK_SIZE >> partDepth;
-  int blkStride = 1 << partDepth;
-  int blkNum    = (1 << partDepth) * (1 << partDepth);
-  for (int subblk = 0; subblk < blkNum; subblk++)
-  {
-    bool hasLeft = true;
-    bool hasTop = true;
-    if (subblk == 0)
-    {
-      hasLeft = leftMargin;
-      hasTop = topMargin;
-    }
-    else if (subblk / blkStride == 0)
-    {
-      hasLeft = true;
-      hasTop = topMargin;
-    }
-    else if (subblk % blkStride == 0)
-    {
-      hasLeft = leftMargin;
-      hasTop = true;
-    }
-
-    int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;
-    int* currQuant = quant + offset;
-    int* currReco = reco + offset;
-
-    //decompression
-    blkcpy(currQuant, currReco, blkWidth, blkHeight, stride);
-    dequantize(currReco, blkWidth, blkHeight, stride, quantSize);
-#if !TRANSFORM_SKIP
-    inv_transform(currReco, blkWidth, blkHeight, stride, bitdepth + 1);
-#endif
-    predict(predMode, currReco, NULL, NULL, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
-  }
+void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin)
+{
+  comp_reco_unit(NULL, NULL, NULL, NULL, quant, reco, IMG_BITDEPTH, stride, stepSize, partDepth, predMode, topMargin, leftMargin);
 }

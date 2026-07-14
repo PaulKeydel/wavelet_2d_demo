@@ -4,6 +4,7 @@
 typedef unsigned char uchar;
 
 //config
+#define IMG_BITDEPTH    8
 #define USE_TAUBMANN    0
 #define MAX_BLOCK_SIZE  128
 #define TRANSFORM_SKIP  0
@@ -30,15 +31,16 @@ void dequantize(int* src, int width, int height, int stride, int quantsize);
 //calculate rate and distortion (MSE)
 unsigned long coded_bits_coeff(int* x, int width, int height, int stride);
 unsigned long mse_dist(int* src, int* reco, int width, int height, int stride);
-//Huffman-coding of quantized coefficients, write bitstream to file
+//encoding and decoding
 unsigned encode_fixlen(int n, int len, uchar* bitsOut, int bitPos);
 unsigned decode_fixlen(int len, uchar* bitsIn, int bitPos, int* n);
 unsigned encode_huffman(int n, uchar* bitsOut, int bitPos);
 unsigned decode_huffman(uchar* bitsIn, int bitPos, int* n);
 unsigned encode_coding_params(int width, int height, int stepSize, uchar* bitsOut, int bitPos);
 unsigned decode_coding_params(uchar* bitsIn, int bitPos, int* width, int* height, int* stepSize);
-unsigned encode_unit(int* quant, int bitdepth, int stride, int stepSize, int partDepth, int predMode, uchar* binStream, int bitPos);
+unsigned encode_unit(int* quant, int stride, int partDepth, int predMode, uchar* binStream, int bitPos);
 unsigned decode_unit(uchar* binStream, int bitPos, int* quant, int stride, int* partDepth, int* predMode);
-//apply all and compress input image
-void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin, unsigned long* bits, unsigned long* dist);
-void reconstruct_unit(int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin);
+//compress and reconstruct input image
+void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin);
+void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin);
+void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin);

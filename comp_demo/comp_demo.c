@@ -7,7 +7,7 @@
 #include "lib_enc_dec.h"
 
 
-void compress(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int bitdepth, int stepSize, double lambda, unsigned long* totalBits, unsigned long* totalDist, uchar* byteStream, unsigned* binLen)
+void compress(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stepSize, double lambda, uchar* byteStream, unsigned* binLen)
 {
   int numUnitsX = width / MAX_BLOCK_SIZE;
   int numUnitsY = height / MAX_BLOCK_SIZE;
@@ -28,29 +28,14 @@ void compress(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, i
     double bestCost = MAXFLOAT;
     int bestPred    = 0;
     int bestDepth   = 0;
+    //find best coding config based on RD-costs
     for (int partDepth = 0; partDepth < 5; partDepth++)
     {
       for (int predMode = 0; predMode < 4; predMode++)
       {
-        unsigned long blkBits = 0UL;
-        unsigned long blkDist = 0UL;
-        compress_unit(
-          x + offset,
-          pred + offset,
-          resi + offset,
-          trafo + offset,
-          quant + offset,
-          reco + offset,
-          bitdepth,
-          width,
-          stepSize,
-          partDepth,
-          predMode,
-          topMargin,
-          leftMargin,
-          &blkBits,
-          &blkDist
-        );
+        compress_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, stepSize, partDepth, predMode, topMargin, leftMargin);
+        unsigned long blkBits = coded_bits_coeff(quant + offset, MAX_BLOCK_SIZE, MAX_BLOCK_SIZE, width);
+        unsigned long blkDist = mse_dist(x + offset, reco + offset, MAX_BLOCK_SIZE, MAX_BLOCK_SIZE, width);
         double blkCost = (double)blkDist + lambda * (double)blkBits;
         if (blkCost < bestCost)
         {
@@ -60,24 +45,9 @@ void compress(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, i
         }
       }
     }
-    compress_unit(
-      x + offset,
-      pred + offset,
-      resi + offset,
-      trafo + offset,
-      quant + offset,
-      reco + offset,
-      bitdepth,
-      width,
-      stepSize,
-      bestDepth,
-      bestPred,
-      topMargin,
-      leftMargin,
-      totalBits,
-      totalDist
-    );
-    *binLen += encode_unit(quant + offset, bitdepth, width, stepSize, bestDepth, bestPred, byteStream, *binLen);
+    //apply best config and encode full unit
+    compress_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, stepSize, bestDepth, bestPred, topMargin, leftMargin);
+    *binLen += encode_unit(quant + offset, width, bestDepth, bestPred, byteStream, *binLen);
   }
   assert(*binLen % 8 == 0);
 }
@@ -111,11 +81,13 @@ int main(int argc, char **argv)
   //estimate bit-depth and QP value
   int bitdepth = calcBitdepth(x, width * height);
   int QP       = calcBitdepth(&stepSize, 1) - 1;
-  printf("processing input: bit-depth input image=%d, QP=%d, Lambda=%f\n", bitdepth, QP, lambda);
 
-  //rate-distortion parameter
-  unsigned long totalBits = 0UL;
-  unsigned long totalDist = 0UL;
+  if (bitdepth > IMG_BITDEPTH)
+  {
+    printf("Actual bitdepth of input image is greater than configured bitdepth!\n");
+    return -1;
+  }
+  printf("processing input: bit-depth input image=%d, QP=%d, Lambda=%f\n", bitdepth, QP, lambda);
 
   //buffer for resulting bitstream
   int maxQuant      = (1 << (bitdepth + 1 - QP)) - 1;
@@ -126,23 +98,7 @@ int main(int argc, char **argv)
 
   //find RD-optimized compression mode and do compression + encoding
   unsigned binLen = encode_coding_params(width, height, stepSize, byteStream, 0);
-  compress(
-    x,
-    pred,
-    resi,
-    trafo,
-    quant,
-    reco,
-    width,
-    height,
-    bitdepth,
-    stepSize,
-    lambda,
-    &totalBits,
-    &totalDist,
-    byteStream,
-    &binLen
-  );
+  compress(x, pred, resi, trafo, quant, reco, width, height, stepSize, lambda, byteStream, &binLen);
   //check quantization output in terms of bitdepth
   assert(calcBitdepth(quant, width * height) <= bitdepth + 1 - QP);
 
@@ -153,6 +109,9 @@ int main(int argc, char **argv)
   array_to_file("outputs_enc/reco.bin", (const void*)reco, sizeof(int), width * height);
   array_to_file("outputs_enc/bitstream.bin", (const void*)byteStream, sizeof(uchar), binLen / 8);
 
+  //rate-distortion summary where we neglect fixlen-coded parameters
+  unsigned long totalBits = coded_bits_coeff(quant, width, height, width);
+  unsigned long totalDist = mse_dist(x, reco, width, height, width);
   printf("Relative distortion (MSE): %f\n", (double)totalDist / (double)(width * height));
   printf("Average symbol length (Bits): %f\n", (double)totalBits / (double)(width * height));
   printf("Compression rate: %f\n", 1.0 - (double)totalBits / (double)(bitdepth * width * height));
