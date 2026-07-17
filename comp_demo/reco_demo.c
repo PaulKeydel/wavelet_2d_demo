@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "lib_enc_dec.h"
 
 
@@ -19,8 +20,9 @@ unsigned get_fsize(const char* fname)
 
 void reconstruct(int* quant, int* reco, int width, int height, int stepSize, uchar* byteStream, unsigned* binLen)
 {
-  int bestPred  = 0;
-  int bestDepth = 0;
+  int bestPred    = 0;
+  int bestDepth   = 0;
+  int bestCutting = 0;
 
   int numUnitsX = width / MAX_BLOCK_SIZE;
   int numUnitsY = height / MAX_BLOCK_SIZE;
@@ -39,8 +41,8 @@ void reconstruct(int* quant, int* reco, int width, int height, int stepSize, uch
 
     int offset = (ui / numUnitsX) * MAX_BLOCK_SIZE * width + (ui % numUnitsX) * MAX_BLOCK_SIZE;
 
-    *binLen += decode_unit(byteStream, *binLen, quant + offset, width, &bestDepth, &bestPred);
-    reconstruct_unit(quant + offset, reco + offset, width, stepSize, bestDepth, bestPred, topMargin, leftMargin);
+    *binLen += decode_unit(byteStream, *binLen, quant + offset, width, &bestDepth, &bestPred, &bestCutting);
+    reconstruct_unit(quant + offset, reco + offset, width, stepSize, bestDepth, bestPred, bestCutting, topMargin, leftMargin);
   }
 }
 

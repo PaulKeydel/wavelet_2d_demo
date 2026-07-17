@@ -20,7 +20,8 @@ int calcBitdepth(int* x, int n)
 
 double calcLambda(int stepSize)
 {
-  double res = 3.392 * stepSize * stepSize - 24.93 * stepSize + 53.88;
+  //double res = 3.392 * stepSize * stepSize - 24.93 * stepSize + 53.88;
+  double res = 2.536 * stepSize * stepSize - 21.27 * stepSize + 76.61;
   res = res < 5 ? 5 : res;
   return res;
 }
@@ -191,16 +192,20 @@ void dequantize(int* src, int width, int height, int stride, int quantsize)
   }
 }
 
-unsigned long coded_bits_coeff(int* x, int width, int height, int stride)
+unsigned long rd_unit_bits(int* x, int stride, int partDepth, int cutCoefs)
 {
   unsigned long bits = 0UL;
-  for (int rowidx = 0; rowidx < height; rowidx++)
+  int blkSize = MAX_BLOCK_SIZE >> partDepth;
+  for (int rowidx = 0; rowidx < MAX_BLOCK_SIZE; rowidx++)
   {
-    for (int colidx = 0; colidx < width; colidx++)
+    for (int colidx = 0; colidx < MAX_BLOCK_SIZE; colidx++)
     {
-      //Huffman coding all four subbands
-      int absVal = abs(x[rowidx * stride + colidx]);
-      bits += (unsigned long)(absVal == 0 ? 1 : absVal + 2);
+      //Huffman coding all relevant subbands
+      if (cutCoefs == 0 || ((rowidx % blkSize) < (blkSize / 2)) || ((colidx % blkSize) < (blkSize / 2)))
+      {
+        int absVal = abs(x[rowidx * stride + colidx]);
+        bits += (unsigned long)(absVal == 0 ? 1 : absVal + 2);
+      }
     }
   }
   return bits;
@@ -297,18 +302,23 @@ unsigned decode_coding_params(uchar* bitsIn, int bitPos, int* width, int* height
   return 32;
 }
 
-unsigned encode_unit(int* quant, int stride, int partDepth, int predMode, uchar* binStream, int bitPos)
+unsigned encode_unit(int* quant, int stride, int partDepth, int predMode, int cutCoefs, uchar* binStream, int bitPos)
 {
   unsigned binLen = 0;
-  binLen +=encode_fixlen(partDepth, 3, binStream, bitPos + binLen);
-  binLen +=encode_fixlen(predMode, 2, binStream, bitPos + binLen);
+  binLen += encode_fixlen(partDepth, 3, binStream, bitPos + binLen);
+  binLen += encode_fixlen(predMode, 2, binStream, bitPos + binLen);
+  binLen += encode_fixlen(cutCoefs, 1, binStream, bitPos + binLen);
 
+  int blkSize = MAX_BLOCK_SIZE >> partDepth;
   for (int rowidx = 0; rowidx < MAX_BLOCK_SIZE; rowidx++)
   {
     for (int colidx = 0; colidx < MAX_BLOCK_SIZE; colidx++)
     {
-      int symbol = *(quant + rowidx * stride + colidx);
-      binLen += encode_huffman(symbol, binStream, bitPos + binLen);
+      if (cutCoefs == 0 || ((rowidx % blkSize) < (blkSize / 2)) || ((colidx % blkSize) < (blkSize / 2)))
+      {
+        int symbol = *(quant + rowidx * stride + colidx);
+        binLen += encode_huffman(symbol, binStream, bitPos + binLen);
+      }
     }
   }
   if (binLen % 8 > 0)
@@ -318,17 +328,26 @@ unsigned encode_unit(int* quant, int stride, int partDepth, int predMode, uchar*
   return binLen;
 }
 
-unsigned decode_unit(uchar* binStream, int bitPos, int* quant, int stride, int* partDepth, int* predMode)
+unsigned decode_unit(uchar* binStream, int bitPos, int* quant, int stride, int* partDepth, int* predMode, int* cutCoefs)
 {
   unsigned binLen = 0;
-  binLen += decode_fixlen(3, binStream, bitPos + 0, partDepth);
-  binLen += decode_fixlen(2, binStream, bitPos + 3, predMode);
+  binLen += decode_fixlen(3, binStream, bitPos + binLen, partDepth);
+  binLen += decode_fixlen(2, binStream, bitPos + binLen, predMode);
+  binLen += decode_fixlen(1, binStream, bitPos + binLen, cutCoefs);
 
+  int blkSize = MAX_BLOCK_SIZE >> *partDepth;
   for (int rowidx = 0; rowidx < MAX_BLOCK_SIZE; rowidx++)
   {
     for (int colidx = 0; colidx < MAX_BLOCK_SIZE; colidx++)
     {
-      binLen += decode_huffman(binStream, bitPos + binLen, quant + rowidx * stride + colidx);
+      if (*cutCoefs && ((rowidx % blkSize) >= (blkSize / 2)) && ((colidx % blkSize) >= (blkSize / 2)))
+      {
+        *(quant + rowidx * stride + colidx) = 0;
+      }
+      else
+      {
+        binLen += decode_huffman(binStream, bitPos + binLen, quant + rowidx * stride + colidx);
+      }
     }
   }
   if (binLen % 8 != 0)
@@ -339,10 +358,29 @@ unsigned decode_unit(uchar* binStream, int bitPos, int* quant, int stride, int* 
   return binLen;
 }
 
-void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin)
+void cut_detail_coefs(int* src, int width, int height, int stride, int partDepth, int cutCoefs)
+{
+  if (cutCoefs != 1)
+  {
+    return;
+  }
+  int blkSize = MAX_BLOCK_SIZE >> partDepth;
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      if (((rowidx % blkSize) >= (blkSize / 2)) && ((colidx % blkSize) >= (blkSize / 2)))
+      {
+        src[rowidx * stride + colidx] = 0;
+      }
+    }
+  }
+}
+
+void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, int cutCoefs, bool topMargin, bool leftMargin)
 {
   //adjust quantization step-size (due to different transform scalings)
-#if TRANSFORM_SKIP || USE_TAUBMANN
+#if USE_TAUBMANN
   int quantSize = stepSize;
 #else
   int quantSize = stepSize << 1;
@@ -382,31 +420,29 @@ void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
       int* currTrafo = trafo + offset;
       blkcpy(currOrig, currResi, blkWidth, blkHeight, stride);
       predict(predMode, currReco, currPred, currResi, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
-#if TRANSFORM_SKIP
-      blkcpy(currResi, currQuant, blkWidth, blkHeight, width);
-#else
       blkcpy(currResi, currTrafo, blkWidth, blkHeight, stride);
       transform(currTrafo, blkWidth, blkHeight, stride, bitdepth + 1);
+      cut_detail_coefs(currTrafo, blkWidth, blkHeight, stride, partDepth, cutCoefs);
       blkcpy(currTrafo, currQuant, blkWidth, blkHeight, stride);
-#endif
       quantize(currQuant, blkWidth, blkHeight, stride, quantSize);
     }
     //decompression
     blkcpy(currQuant, currReco, blkWidth, blkHeight, stride);
     dequantize(currReco, blkWidth, blkHeight, stride, quantSize);
-#if !TRANSFORM_SKIP
     inv_transform(currReco, blkWidth, blkHeight, stride, bitdepth + 1);
-#endif
     predict(predMode, currReco, NULL, NULL, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
   }
 }
 
-void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin)
+void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, int cutCoefs, bool topMargin, bool leftMargin, unsigned long* rdBits, unsigned long* rdDist)
 {
-  comp_reco_unit(x, pred, resi, trafo, quant, reco, IMG_BITDEPTH, stride, stepSize, partDepth, predMode, topMargin, leftMargin);
+  comp_reco_unit(x, pred, resi, trafo, quant, reco, IMG_BITDEPTH, stride, stepSize, partDepth, predMode, cutCoefs, topMargin, leftMargin);
+  //estimate bits per unit and calculate MSE
+  *rdBits += rd_unit_bits(quant, stride, partDepth, cutCoefs);
+  *rdDist += mse_dist(x, reco, MAX_BLOCK_SIZE, MAX_BLOCK_SIZE, stride);
 }
 
-void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, bool topMargin, bool leftMargin)
+void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, int cutCoefs, bool topMargin, bool leftMargin)
 {
-  comp_reco_unit(NULL, NULL, NULL, NULL, quant, reco, IMG_BITDEPTH, stride, stepSize, partDepth, predMode, topMargin, leftMargin);
+  comp_reco_unit(NULL, NULL, NULL, NULL, quant, reco, IMG_BITDEPTH, stride, stepSize, partDepth, predMode, cutCoefs, topMargin, leftMargin);
 }

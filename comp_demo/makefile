@@ -12,11 +12,11 @@ SRCS:=$(filter-out $(TARGET1).c, $(SRCS))
 SRCS:=$(filter-out $(TARGET2).c, $(SRCS))
 OBJS=$(patsubst %.c,$(OBJDIR)/%.o,$(SRCS))
 
+all: $(TARGET1) $(TARGET2)
+
 .PHONY: debug
 debug: CFLAGS += -g -Wall
-debug: all
-
-all: $(TARGET1) $(TARGET2)
+debug: $(TARGET1) $(TARGET2)
 
 $(OBJDIR)/%.o: %.c | $(OBJDIR) $(OUTDIR)
 	$(CC) $(CFLAGS) $< -o $@
