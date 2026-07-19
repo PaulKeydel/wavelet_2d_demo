@@ -1,4 +1,10 @@
-//Different sets of filters
+//subband types
+#define SUBBAND_LL   0
+#define SUBBAND_LH   1
+#define SUBBAND_HL   2
+#define SUBBAND_HH   3
+
+//different sets of filters
 typedef struct
 {
   double h_syn[7];
@@ -22,7 +28,7 @@ static FilterSet FilterTaubmann = {
 };
 
 //forward declaration of 2D CDF9/7 wavelet transformation methods
-
+int subband(int row, int col, int width, int height, int stride);
 //via lifting scheme
 void ilwt97_2d(double* x, int width, int height, int stride);
 void lwt97_2d(double* x, int width, int height, int stride);

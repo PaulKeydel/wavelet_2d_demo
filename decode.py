@@ -16,14 +16,16 @@ def files_equal(path1, path2, chunk=8192):
 def decode_unit(binstr: list, unit_blk_size: int) -> tuple[int, int, np.ndarray, int]:
     dec_depth = binstr[0] * 4 + binstr[1] * 2 + binstr[2]
     dec_pred  = binstr[3] * 2 + binstr[4]
-    dec_cut   = binstr[5]
+    dec_cut   = binstr[5] * 2 + binstr[6]
     dec_coef  = np.empty((unit_blk_size, unit_blk_size))
     blksize   = unit_blk_size >> dec_depth
-    i         = 6
-    i_last    = 6
+    i         = 7
+    i_last    = 7
     for row in range(unit_blk_size):
         for col in range(unit_blk_size):
-            if dec_cut and row % blksize >= blksize / 2 and col % blksize >= blksize / 2:
+            if ((dec_cut == 1 and row % blksize < blksize / 2 and col % blksize >= blksize / 2) or
+                (dec_cut == 2 and row % blksize >= blksize / 2 and col % blksize < blksize / 2) or
+                (dec_cut == 3 and row % blksize >= blksize / 2 and col % blksize >= blksize / 2)):
                 dec_coef[row, col] = 0
                 continue
             while (binstr[i] != 0):

@@ -38,13 +38,13 @@ void compress(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, i
         {
           unsigned long blkBits = 0UL;
           unsigned long blkDist = 0UL;
-          compress_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, stepSize, partDepth, predMode, cutMode, topMargin, leftMargin, &blkBits, &blkDist);
+          compress_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, stepSize, partDepth, predMode, cutMode * CUT_HH, topMargin, leftMargin, &blkBits, &blkDist);
           double blkCost = (double)blkDist + lambda * (double)blkBits;
           if (blkCost < bestCost)
           {
             bestDepth = partDepth;
             bestPred = predMode;
-            bestCutting = cutMode;
+            bestCutting = cutMode * CUT_HH;
             bestCost = blkCost;
           }
         }
@@ -97,7 +97,7 @@ int main(int argc, char **argv)
   //buffer for resulting bitstream
   int maxQuant      = (1 << (bitdepth + 1 - QP)) - 1;
   int numUnits      = (width / MAX_BLOCK_SIZE) * (height / MAX_BLOCK_SIZE);
-  int numBytes      = (32 + 6 * numUnits + (maxQuant + 2) * MAX_BLOCK_SIZE * MAX_BLOCK_SIZE) / 8;
+  int numBytes      = (32 + 7 * numUnits + (maxQuant + 2) * MAX_BLOCK_SIZE * MAX_BLOCK_SIZE) / 8;
   uchar* byteStream = (uchar*)malloc(numBytes);
   memset(byteStream, 0, numBytes);
 

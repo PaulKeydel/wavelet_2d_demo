@@ -18,6 +18,13 @@ typedef unsigned char uchar;
 #define PRED_DIAG    3
 #define NUM_PREDS    4
 
+//coef cutting modes
+#define CUT_OFF      0
+#define CUT_LH       1
+#define CUT_HL       2
+#define CUT_HH       3
+#define NUM_CUTTINGS 4
+
 //macros for bit manipulation on unsigned char array
 #define setBit(arr,k,val) ( arr[(k/8)] = (val == 1) ? arr[(k/8)] | (1 << (7 - (k%8))) : arr[(k/8)] & ~(1 << (7 - (k%8))) )
 #define checkBit(arr,k)   ( (arr[(k/8)] >> (7 - (k%8))) & 1 )
@@ -50,7 +57,7 @@ unsigned decode_coding_params(uchar* bitsIn, int bitPos, int* width, int* height
 unsigned encode_unit(int* quant, int stride, int partDepth, int predMode, int cutCoefs, uchar* binStream, int bitPos);
 unsigned decode_unit(uchar* binStream, int bitPos, int* quant, int stride, int* partDepth, int* predMode, int* cutCoefs);
 //compress and reconstruct input image
-void cut_detail_coefs(int* src, int width, int height, int stride, int partDepth, int cutCoefs);
+void cut_detail_coefs(int* src, int width, int height, int stride, int cutCoefs);
 void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, int cutCoefs, bool topMargin, bool leftMargin);
 void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, int cutCoefs, bool topMargin, bool leftMargin, unsigned long* rdBits, unsigned long* rdDist);
 void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, int cutCoefs, bool topMargin, bool leftMargin);
