@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import struct
+from subprocess import run
 from pathlib import Path
 
 def files_equal(path1, path2, chunk=8192): 
@@ -94,14 +95,17 @@ def write_cfg_overview(fname: str):
             f.write("depth: " + str(bestDepths[i]) + "\n")
             f.write("  preds: " + str(bestPreds[i]) + "\n")
             f.write("  cuts:  " + str(bestCuts[i]) + "\n")
+        f.close()
 
 
 if __name__ == "__main__":
     for quantSize in range(4, 25, 4):
         #run encoder and decoder
         os.chdir("comp_demo")
-        os.system("./comp_demo ../astronaut.bin 512 512 " + str(quantSize) + " > /dev/null")
-        os.system("./reco_demo outputs_enc/bitstream.bin > /dev/null")
+        cmd_comp = "./comp_demo ../astronaut.bin 512 512 " + str(quantSize) + " > /dev/null"
+        cmd_reco = "./reco_demo outputs_enc/bitstream.bin > /dev/null"
+        run(cmd_comp, shell=True, capture_output=False)
+        run(cmd_reco, shell=True, capture_output=False)
 
         #check if decoder matches encoder
         print("Decoding succesful and valid? ", files_equal("outputs_enc/reco.bin", "outputs_dec/reco.bin"))
