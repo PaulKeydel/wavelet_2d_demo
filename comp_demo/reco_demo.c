@@ -41,11 +41,7 @@ void reconstruct(int* quant, int* reco, int width, int height, int stepSize, uch
 
     int offset = (ui / numUnitsX) * MAX_BLOCK_SIZE * width + (ui % numUnitsX) * MAX_BLOCK_SIZE;
 
-    *binLen += decode_unit(byteStream, *binLen, quant + offset, width, &bestDepth, &bestPred, &bestCutting);
-    //printf("ui: %d\n", ui);
-    //printf("  cutting: %d\n", bestCutting);
-    //printf("  pred: %d\n", bestPred);
-    reconstruct_unit(quant + offset, reco + offset, width, stepSize, bestDepth, bestPred, bestCutting, topMargin, leftMargin);
+    reconstruct_unit(quant + offset, reco + offset, width, stepSize, topMargin, leftMargin, byteStream, binLen);
   }
 }
 

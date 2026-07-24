@@ -8,8 +8,8 @@ typedef unsigned char uchar;
 #define MAX_BLOCK_SIZE   128
 #define USE_TAUBMANN     0
 //encoder related config
-#define SEARCH_SPLT_DEPTH 4
-#define SEARCH_CUT_DEPTH  3
+#define ENC_MAX_DEPTH    3
+#define ENC_SPECIAL_CUT  1
 
 //prediction modes
 #define PRED_CONST   0
@@ -20,10 +20,9 @@ typedef unsigned char uchar;
 
 //coef cutting modes
 #define CUT_OFF      0
-#define CUT_LH       1
-#define CUT_HL       2
-#define CUT_HH       3
-#define NUM_CUTTINGS 4
+#define CUT_HH       1
+#define CUT_LH_HL_HH 2
+#define NUM_CUTTINGS 3
 
 //macros for bit manipulation on unsigned char array
 #define setBit(arr,k,val) ( arr[(k/8)] = (val == 1) ? arr[(k/8)] | (1 << (7 - (k%8))) : arr[(k/8)] & ~(1 << (7 - (k%8))) )
@@ -32,6 +31,7 @@ typedef unsigned char uchar;
 //helper functions
 int calcBitdepth(int* x, int n);
 double calcLambda(int stepSize);
+unsigned long mse_dist(int* src, int* reco, int width, int height, int stride);
 int clipLR(int val, int min, int max);
 void blkcpy(int* src, int* dst, int width, int height, int stride);
 void array_to_file(const char* fname, const void* data, int typeSize, int len);
@@ -44,20 +44,19 @@ void inv_transform(int* src, int width, int height, int stride, int bitdepthOut)
 //quantize and dequantize
 void quantize(int* src, int width, int height, int stride, int quantsize);
 void dequantize(int* src, int width, int height, int stride, int quantsize);
-//calculate rate and distortion (MSE)
-unsigned long rd_unit_bits(int* x, int stride, int partDepth, int cutCoefs);
-unsigned long mse_dist(int* src, int* reco, int width, int height, int stride);
 //encoding and decoding
-unsigned encode_fixlen(int n, int len, uchar* bitsOut, int bitPos);
-unsigned decode_fixlen(int len, uchar* bitsIn, int bitPos, int* n);
-unsigned encode_huffman(int n, uchar* bitsOut, int bitPos);
-unsigned decode_huffman(uchar* bitsIn, int bitPos, int* n);
-unsigned encode_coding_params(int width, int height, int stepSize, uchar* bitsOut, int bitPos);
-unsigned decode_coding_params(uchar* bitsIn, int bitPos, int* width, int* height, int* stepSize);
-unsigned encode_unit(int* quant, int stride, int partDepth, int predMode, int cutCoefs, uchar* binStream, int bitPos);
-unsigned decode_unit(uchar* binStream, int bitPos, int* quant, int stride, int* partDepth, int* predMode, int* cutCoefs);
+unsigned encode_fixlen(int n, int len, uchar* bitsOut, unsigned bitPos);
+unsigned decode_fixlen(int len, uchar* bitsIn, unsigned bitPos, int* n);
+unsigned encode_huffman(int n, uchar* bitsOut, unsigned bitPos);
+unsigned decode_huffman(uchar* bitsIn, unsigned bitPos, int* n);
+unsigned encode_coding_params(int width, int height, int stepSize, uchar* bitsOut, unsigned bitPos);
+unsigned decode_coding_params(uchar* bitsIn, unsigned bitPos, int* width, int* height, int* stepSize);
+unsigned encode_unit(int* quant, int stride, int partDepth, int* predModes, int* cutModes, uchar* binStream, unsigned bitPos);
+unsigned decode_unit(uchar* binStream, unsigned bitPos, int* quant, int stride, int* partDepth, int* predModes, int* cutModes);
 //compress and reconstruct input image
-void cut_detail_coefs(int* src, int width, int height, int stride, int cutCoefs);
-void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int bitdepth, int stride, int stepSize, int partDepth, int predMode, int cutCoefs, bool topMargin, bool leftMargin);
-void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, int cutCoefs, bool topMargin, bool leftMargin, unsigned long* rdBits, unsigned long* rdDist);
-void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, int partDepth, int predMode, int cutCoefs, bool topMargin, bool leftMargin);
+void cut_detail_coefs(int* src, int width, int height, int stride, int cutMode);
+unsigned rd_est_bits(int* x, int width, int height, int stride, int cutMode);
+void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, bool topMargin, bool leftMargin, double lambda, int* bestDepth, int* bestPreds, int* bestCuttings);
+void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, int partDepth, int* predModes, int* cutModes, bool topMargin, bool leftMargin);
+void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, bool topMargin, bool leftMargin, double lambda, uchar* binStream, unsigned* bitPos);
+void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, bool topMargin, bool leftMargin, uchar* binStream, unsigned* bitPos);

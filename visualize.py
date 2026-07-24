@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import pywt
 from pylab import cm
 from eval_RD import RDeval
-from decode import decode_full
+from decode import (decode_full, write_cfg_overview)
 
 def run_compression(binImg: str, width: int, height: int, quantSize: int) -> tuple[float, float]:
     os.chdir("comp_demo")
@@ -97,8 +97,8 @@ class DemoPrediction:
             plt.show()
         else:
             assert(save_as.endswith(".svg"))
-            print("Processing file '" + save_as + "'...")
             fig.savefig(save_as, format="svg", bbox_inches="tight")
+            print("File '" + save_as + "' saved...")
 
 
 class DemoSteps:
@@ -173,8 +173,8 @@ class DemoSteps:
             plt.show()
         else:
             assert(save_as.endswith(".svg"))
-            print("Processing file '" + save_as + "'...")
             fig.savefig(save_as, format="svg", bbox_inches="tight")
+            print("File '" + save_as + "' saved...")
 
 class DemoEncoding:
     @staticmethod
@@ -183,9 +183,10 @@ class DemoEncoding:
         plt.close()
 
         run_compression(binImg, width, height, quantSize)
-        orig, reco, pred, resi, coeff = load_binaries(width, height)
-        dec_depths, dec_preds, dec_coefs = decode_full("comp_demo/outputs_enc/bitstream.bin", 128)
+        orig, _, _, _, coeff = load_binaries(width, height)
+        dec_depths, _, _, dec_coefs = decode_full("comp_demo/outputs_enc/bitstream.bin", 128)
         assert((dec_coefs == coeff).all())
+        write_cfg_overview("decoded_config.txt")
 
         symbols, counts = np.unique(np.abs(dec_coefs), return_counts=True)
         data_huffman = dict(zip(symbols.astype(np.int32), counts))
@@ -210,9 +211,7 @@ class DemoEncoding:
                 xt = 12 + j * 128
                 yt = 12 + i * 128
                 bin_depth = str((dec_depths[ui] >> 2) & 1) + str((dec_depths[ui] >> 1) & 1) + str(dec_depths[ui] & 1)
-                bin_pred = str((dec_preds[ui] >> 1) & 1) + str(dec_preds[ui] & 1)
                 axs[0, 1].text(xt, yt, "Split level: " + bin_depth + " (" + str(dec_depths[ui]) + ")", ha="left", va="center", fontsize=6)
-                axs[0, 1].text(xt, yt + 15, "Pred mode: " + bin_pred + " (" + str(dec_preds[ui]) + ")", ha="left", va="center", fontsize=6)
         axs[0, 1].xaxis.set_ticks([])
         axs[0, 1].yaxis.set_ticks([])
 
@@ -233,8 +232,8 @@ class DemoEncoding:
             plt.show()
         else:
             assert(save_as.endswith(".svg"))
-            print("Processing file '" + save_as + "'...")
             fig.savefig(save_as, format="svg", bbox_inches="tight")
+            print("File '" + save_as + "' saved...")
 
 class DemoTrafo:
     @staticmethod
@@ -302,8 +301,8 @@ class DemoTrafo:
             plt.show()
         else:
             assert(save_as.endswith(".svg"))
-            print("Processing file '" + save_as + "'...")
             fig.savefig(save_as, format="svg", bbox_inches="tight")
+            print("File '" + save_as + "' saved...")
 
 
 class DemoRD:
@@ -329,7 +328,7 @@ class DemoRD:
                 title = "Increasing R-D-costs (J = D + λR) orthogonal to the optimal RD-curve"
             fig = plt.figure(figsize=(10, 6))
             plt.scatter(rd.bitlen, rd.dist, c=cats, cmap="viridis_r")
-            plt.xlim(0, None)
+            plt.xlim(-0.5, None)
             for simplex in simplices:
                 plt.plot(rd.points[simplex, 0], rd.points[simplex, 1], "k-")
             for vertex in vertices:
@@ -355,9 +354,9 @@ class DemoRD:
             else:
                 fig.set_size_inches(15, 9)
                 assert(save_as.endswith(".svg"))
-                fname = save_as if figMode == 0 else save_as[:-4] + "_costs.svg"
-                print("Processing file '" + fname + "'...")
-                fig.savefig(fname, format="svg", bbox_inches="tight", dpi=100)
+                save_as = save_as if figMode == 0 else save_as[:-4] + "_costs.svg"
+                fig.savefig(save_as, format="svg", bbox_inches="tight", dpi=100)
+                print("File '" + save_as + "' saved...")
 
 
 if __name__ == "__main__":
