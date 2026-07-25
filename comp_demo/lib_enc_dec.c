@@ -469,8 +469,6 @@ void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
             continue;
           }
 #endif
-          unsigned long blkDist;
-          unsigned int blkBits;
           //compression: prediction, 9/7 transformtion and quatization
           blkcpy(currOrig, currResi, blkWidth, blkHeight, stride);
           predict(predMode, currReco, currPred, currResi, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
@@ -485,8 +483,8 @@ void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
           inv_transform(currReco, blkWidth, blkHeight, stride, bitdepth + 1);
           predict(predMode, currReco, NULL, NULL, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
           //estimate bits per unit and calculate MSE
-          blkBits = rd_est_bits(currQuant, blkWidth, blkHeight, stride, cutMode);
-          blkDist = mse_dist(currOrig, currReco, blkWidth, blkHeight, stride);
+          unsigned int blkBits = rd_est_bits(currQuant, blkWidth, blkHeight, stride, cutMode);
+          unsigned long blkDist = mse_dist(currOrig, currReco, blkWidth, blkHeight, stride);
           double blkCost = (double)blkDist + lambda * (double)blkBits;
           if (blkCost < bestCostSubblk)
           {

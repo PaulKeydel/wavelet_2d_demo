@@ -71,7 +71,8 @@ int main(int argc, char **argv)
   //buffer for resulting bitstream
   int maxQuant      = (1 << (bitdepth + 1 - QP)) - 1;
   int numUnits      = (width / MAX_BLOCK_SIZE) * (height / MAX_BLOCK_SIZE);
-  int numBytes      = (32 + 7 * numUnits + (maxQuant + 2) * MAX_BLOCK_SIZE * MAX_BLOCK_SIZE) / 8;
+  int numSubUnits   = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
+  int numBytes      = (32 + 3 * numUnits + 4 * numSubUnits + (maxQuant + 2) * MAX_BLOCK_SIZE * MAX_BLOCK_SIZE) / 8;
   uchar* byteStream = (uchar*)malloc(numBytes);
   memset(byteStream, 0, numBytes);
 
