@@ -54,14 +54,6 @@ int clipLR(int val, int min, int max)
   return val;
 }
 
-void blkcpy(int* src, int* dst, int width, int height, int stride)
-{
-  for (int rowidx = 0; rowidx < height; rowidx++)
-  {
-    memcpy(dst + rowidx * stride, src + rowidx * stride, width * sizeof(int));
-  }
-}
-
 void array_to_file(const char* fname, const void* data, int typeSize, int len)
 {
   FILE* fp = fopen(fname, "wb");
@@ -420,6 +412,37 @@ unsigned rd_est_bits(int* x, int width, int height, int stride, int cutMode)
   return bits;
 }
 
+void comp_subblk(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, int cutMode, bool topMargin, bool leftMargin)
+{
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    memcpy(resi + rowidx * stride, x + rowidx * stride, width * sizeof(int));
+  }
+  predict(predMode, reco, pred, resi, width, height, stride, leftMargin, topMargin, bitdepth);
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    memcpy(trafo + rowidx * stride, resi + rowidx * stride, width * sizeof(int));
+  }
+  transform(trafo, width, height, stride, bitdepth + 1);
+  cut_detail_coefs(trafo, width, height, stride, cutMode);
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    memcpy(quant + rowidx * stride, trafo + rowidx * stride, width * sizeof(int));
+  }
+  quantize(quant, width, height, stride, quantSize);
+}
+
+void reco_subblk(int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, bool topMargin, bool leftMargin)
+{
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    memcpy(reco + rowidx * stride, quant + rowidx * stride, width * sizeof(int));
+  }
+  dequantize(reco, width, height, stride, quantSize);
+  inv_transform(reco, width, height, stride, bitdepth + 1);
+  predict(predMode, reco, NULL, NULL, width, height, stride, leftMargin, topMargin, bitdepth);
+}
+
 void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, bool topMargin, bool leftMargin, double lambda, int* bestDepth, int* bestPreds, int* bestCuttings)
 {
   double bestCost = MAXFLOAT;
@@ -469,19 +492,9 @@ void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
             continue;
           }
 #endif
-          //compression: prediction, 9/7 transformtion and quatization
-          blkcpy(currOrig, currResi, blkWidth, blkHeight, stride);
-          predict(predMode, currReco, currPred, currResi, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
-          blkcpy(currResi, currTrafo, blkWidth, blkHeight, stride);
-          transform(currTrafo, blkWidth, blkHeight, stride, bitdepth + 1);
-          cut_detail_coefs(currTrafo, blkWidth, blkHeight, stride, cutMode);
-          blkcpy(currTrafo, currQuant, blkWidth, blkHeight, stride);
-          quantize(currQuant, blkWidth, blkHeight, stride, quantSize);
-          //decompression
-          blkcpy(currQuant, currReco, blkWidth, blkHeight, stride);
-          dequantize(currReco, blkWidth, blkHeight, stride, quantSize);
-          inv_transform(currReco, blkWidth, blkHeight, stride, bitdepth + 1);
-          predict(predMode, currReco, NULL, NULL, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
+          comp_subblk(currOrig, currPred, currResi, currTrafo, currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, cutMode, hasTop, hasLeft);
+          reco_subblk(currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, hasTop, hasLeft);
+
           //estimate bits per unit and calculate MSE
           unsigned int blkBits = rd_est_bits(currQuant, blkWidth, blkHeight, stride, cutMode);
           unsigned long blkDist = mse_dist(currOrig, currReco, blkWidth, blkHeight, stride);
@@ -544,19 +557,10 @@ void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
       int* currPred = pred + offset;
       int* currResi = resi + offset;
       int* currTrafo = trafo + offset;
-      blkcpy(currOrig, currResi, blkWidth, blkHeight, stride);
-      predict(predMode, currReco, currPred, currResi, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
-      blkcpy(currResi, currTrafo, blkWidth, blkHeight, stride);
-      transform(currTrafo, blkWidth, blkHeight, stride, bitdepth + 1);
-      cut_detail_coefs(currTrafo, blkWidth, blkHeight, stride, cutMode);
-      blkcpy(currTrafo, currQuant, blkWidth, blkHeight, stride);
-      quantize(currQuant, blkWidth, blkHeight, stride, quantSize);
+      comp_subblk(currOrig, currPred, currResi, currTrafo, currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, cutMode, hasTop, hasLeft);
     }
     //decompression
-    blkcpy(currQuant, currReco, blkWidth, blkHeight, stride);
-    dequantize(currReco, blkWidth, blkHeight, stride, quantSize);
-    inv_transform(currReco, blkWidth, blkHeight, stride, bitdepth + 1);
-    predict(predMode, currReco, NULL, NULL, blkWidth, blkHeight, stride, hasLeft, hasTop, bitdepth);
+    reco_subblk(currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, hasTop, hasLeft);
   }
 }
 

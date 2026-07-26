@@ -33,7 +33,6 @@ int calcBitdepth(int* x, int n);
 double calcLambda(int stepSize);
 unsigned long mse_dist(int* src, int* reco, int width, int height, int stride);
 int clipLR(int val, int min, int max);
-void blkcpy(int* src, int* dst, int width, int height, int stride);
 void array_to_file(const char* fname, const void* data, int typeSize, int len);
 void array_from_file(const char* fname, void* data, int typeSize, int len);
 //add or subtract prediction
@@ -56,6 +55,8 @@ unsigned decode_unit(uchar* binStream, unsigned bitPos, int* quant, int stride, 
 //compress and reconstruct input image
 void cut_detail_coefs(int* src, int width, int height, int stride, int cutMode);
 unsigned rd_est_bits(int* x, int width, int height, int stride, int cutMode);
+void comp_subblk(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, int cutMode, bool topMargin, bool leftMargin);
+void reco_subblk(int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, bool topMargin, bool leftMargin);
 void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, bool topMargin, bool leftMargin, double lambda, int* bestDepth, int* bestPreds, int* bestCuttings);
 void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, int partDepth, int* predModes, int* cutModes, bool topMargin, bool leftMargin);
 void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, bool topMargin, bool leftMargin, double lambda, uchar* binStream, unsigned* bitPos);
