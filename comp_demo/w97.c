@@ -26,25 +26,29 @@ int subband(int row, int col, int width, int height, int stride)
 void convWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLength, double* signal, int n, int stride)
 {
   double* tempbank = (double*)malloc(n * sizeof(double));
-  int i,idx,k;
-  for (i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     tempbank[i] = 0;
   }
-  for (idx = 0; idx < n/2; idx++)
+  for (int j = 0; j < n/2; j++)
   {
-    for (i = 0; i <= hLength - 1; i++)
+    for (int k = 0; k < hLength; k++)
     {
-      k = (abs(2*idx+i-(hLength-1)/2) < n) ? abs(2*idx+i-(hLength-1)/2) : 2*(n-1)-abs(2*idx+i-(hLength-1)/2);
-      tempbank[idx] += ScalingFilter[i] * signal[k * stride];
+      //symmetric padding before convolution
+      int idx = 2 * j + k - (hLength-1)/2;
+      if (idx < 0) idx = abs(idx);
+      if (idx >= n) idx = 2 * n - 1 - idx;
+      tempbank[j] += ScalingFilter[k] * signal[idx * stride];
     }
-    for (i=0; i<=gLength-1; i++)
+    for (int k = 0; k < gLength; k++)
     {
-      k = (abs(2*idx+i-(gLength-3)/2) < n) ? abs(2*idx+i-(gLength-3)/2) : 2*(n-1)-abs(2*idx+i-(gLength-3)/2);
-      tempbank[idx+n/2] += WaveletFilter[i] * signal[k * stride];
+      int idx = 2 * j + k - (gLength-1)/2;
+      if (idx < 0) idx = abs(idx);
+      if (idx >= n) idx = 2 * n - 1 - idx;
+      tempbank[j + n/2] += WaveletFilter[k] * signal[idx * stride];
     }
   }
-  for (i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     signal[i * stride] = tempbank[i];
   }
@@ -70,28 +74,28 @@ void convWT_2d(FilterSet* filters, double* x, int width, int height, int stride)
 void invconvWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLength, double* trafo, int n, int stride)
 {
   double* tempbank = (double*)malloc(n * sizeof(double));
-  int i,idx,k;
-  for (i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     tempbank[i] = 0;
   }
-  for (idx = 0; idx < n; idx++)
+  for (int j = 0; j < n; j++)
   {
-    for (i=idx/2-(hLength-1)/4; 2*i<=(idx+(hLength-1)/2); i++)
+    for (int k = 0; k < hLength; k++)
     {
-      k = (abs(i) < n/2) ? abs(i) : n-1-abs(i);
-      tempbank[idx]+=ScalingFilter[idx-2*i+(hLength-1)/2]*trafo[k*stride];
+      int idx = j/2 + k - (hLength-1)/2;
+      if (idx < 0) idx = abs(idx);
+      if (idx >= n/2) idx = n - 1 - idx;
+      tempbank[j] += ScalingFilter[k] * trafo[idx * stride];
     }
-    for (i=idx/2-(gLength+1)/4; 2*i<=(idx+(gLength-3)/2); i++) //oder <= ???
+    for (int k = 0; k < gLength; k++)
     {
-      //k = (abs(i) < length/2) ? abs(i)-1 : length-1-abs(i);
-      k=i;
-      if (i<0) k=abs(i)-1;
-      if (i>=n/2) k=n-i-2;
-      tempbank[idx]+=WaveletFilter[idx-2*i+(gLength-3)/2]*trafo[(k+n/2)*stride];
+      int idx = j/2 + k - (gLength-1)/2;
+      if (idx < 0) idx = abs(idx);
+      if (idx >= n/2) idx = n - 1 - idx;
+      tempbank[j] += WaveletFilter[k] * trafo[(idx + n/2) * stride];
     }
   }
-  for (i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     trafo[i * stride] = tempbank[i];
   }

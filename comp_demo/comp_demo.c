@@ -90,11 +90,11 @@ int main(int argc, char **argv)
   array_to_file("outputs_enc/bitstream.bin", (const void*)byteStream, sizeof(uchar), binLen / 8);
 
   //rate-distortion summary where we neglect fixlen-coded parameters
-  unsigned long totalDist = mse_dist(x, reco, width, height, width);
-  unsigned long totalBits = (unsigned long)binLen;
-  printf("Relative distortion (MSE): %f\n", (double)totalDist / (double)(width * height));
-  printf("Average symbol length (Bits): %f\n", (double)totalBits / (double)(width * height));
-  printf("Compression rate: %f\n", 1.0 - (double)totalBits / (double)(bitdepth * width * height));
+  double totalDist = (double)mse_dist(x, reco, width, height, width);
+  double totalBits = (double)binLen;
+  printf("Relative distortion (MSE): %f\n", totalDist / (double)(width * height));
+  printf("Average symbol length (Bits): %f\n", totalBits / (double)(width * height));
+  printf("Compression rate: %f\n", 1.0 - totalBits / (double)(bitdepth * width * height));
 
   free(byteStream);
   free(x);
