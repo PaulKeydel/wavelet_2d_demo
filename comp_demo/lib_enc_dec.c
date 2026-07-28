@@ -135,6 +135,7 @@ void transform(int* src, int width, int height, int stride, int bitdepthIn)
   int clipMin = -(1 << (bitdepthIn - 1)) + 1;
   int clipMax = (1 << (bitdepthIn - 1)) - 1;
 #else
+  //convWT_2d(&FilterCDF97, dsrc, width, height, width);
   lwt97_2d(dsrc, width, height, width);
   int clipMin = -(1 << bitdepthIn) + 1;
   int clipMax = (1 << bitdepthIn) - 1;
@@ -162,6 +163,7 @@ void inv_transform(int* src, int width, int height, int stride, int bitdepthOut)
 #if USE_TAUBMANN
   invconvWT_2d(&FilterTaubmann, dsrc, width, height, width);
 #else
+  //invconvWT_2d(&FilterCDF97, dsrc, width, height, width);
   ilwt97_2d(dsrc, width, height, width);
 #endif
   int clipMin = -(1 << (bitdepthOut - 1)) + 1;

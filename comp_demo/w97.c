@@ -37,14 +37,14 @@ void convWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLeng
       //symmetric padding before convolution
       int idx = 2 * j + k - (hLength-1)/2;
       if (idx < 0) idx = abs(idx);
-      if (idx >= n) idx = 2 * n - 1 - idx;
+      if (idx >= n) idx = 2 * n - 2 - idx;
       tempbank[j] += ScalingFilter[k] * signal[idx * stride];
     }
     for (int k = 0; k < gLength; k++)
     {
-      int idx = 2 * j + k - (gLength-1)/2;
+      int idx = 2 * j + k - (gLength-1)/2 + 1;
       if (idx < 0) idx = abs(idx);
-      if (idx >= n) idx = 2 * n - 1 - idx;
+      if (idx >= n) idx = 2 * n - 2 - idx;
       tempbank[j + n/2] += WaveletFilter[k] * signal[idx * stride];
     }
   }
@@ -82,17 +82,25 @@ void invconvWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gL
   {
     for (int k = 0; k < hLength; k++)
     {
-      int idx = j/2 + k - (hLength-1)/2;
-      if (idx < 0) idx = abs(idx);
-      if (idx >= n/2) idx = n - 1 - idx;
-      tempbank[j] += ScalingFilter[k] * trafo[idx * stride];
+      int idx = j + k - (hLength-1)/2;
+      if (idx % 2 == 0)
+      {
+        if (idx < 0) idx = abs(idx);
+        if (idx >= n) idx = 2 * n - 2 - idx;
+        idx /= 2;
+        tempbank[j] += ScalingFilter[k] * trafo[idx * stride];
+      }
     }
     for (int k = 0; k < gLength; k++)
     {
-      int idx = j/2 + k - (gLength-1)/2;
-      if (idx < 0) idx = abs(idx);
-      if (idx >= n/2) idx = n - 1 - idx;
-      tempbank[j] += WaveletFilter[k] * trafo[(idx + n/2) * stride];
+      int idx = j + k - (gLength-1)/2 - 1;
+      if (idx % 2 == 0)
+      {
+        if (idx < 0) idx = abs(idx);
+        if (idx >= n) idx = 2 * n - 2 - idx;
+        idx /= 2;
+        tempbank[j] += WaveletFilter[k] * trafo[(idx + n/2) * stride];
+      }
     }
   }
   for (int i = 0; i < n; i++)
