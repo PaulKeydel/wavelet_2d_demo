@@ -55,22 +55,6 @@ void convWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLeng
   free(tempbank);
 }
 
-void convWT_2d(FilterSet* filters, double* x, int width, int height, int stride)
-{
-  double* ScalingFilter = filters->h_ana;
-  int hLength = 9;
-  double* WaveletFilter = filters->g_ana;
-  int gLength = 7;
-  for (int rowidx = 0; rowidx < height; rowidx++)
-  {
-    convWT(ScalingFilter, hLength, WaveletFilter, gLength, x + rowidx * stride, width, 1);
-  }
-  for (int colidx = 0; colidx < width; colidx++)
-  {
-    convWT(ScalingFilter, hLength, WaveletFilter, gLength, x + colidx, height, stride);
-  }
-}
-
 void invconvWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLength, double* trafo, int n, int stride)
 {
   double* tempbank = (double*)malloc(n * sizeof(double));
@@ -93,8 +77,8 @@ void invconvWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gL
     }
     for (int k = 0; k < gLength; k++)
     {
-      int idx = j + k - (gLength-1)/2 - 1;
-      if (idx % 2 == 0)
+      int idx = j + k - (gLength-1)/2;
+      if (idx % 2 == 1)
       {
         if (idx < 0) idx = abs(idx);
         if (idx >= n) idx = 2 * n - 2 - idx;
@@ -108,6 +92,22 @@ void invconvWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gL
     trafo[i * stride] = tempbank[i];
   }
   free(tempbank);
+}
+
+void convWT_2d(FilterSet* filters, double* x, int width, int height, int stride)
+{
+  double* ScalingFilter = filters->h_ana;
+  int hLength = 9;
+  double* WaveletFilter = filters->g_ana;
+  int gLength = 7;
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    convWT(ScalingFilter, hLength, WaveletFilter, gLength, x + rowidx * stride, width, 1);
+  }
+  for (int colidx = 0; colidx < width; colidx++)
+  {
+    convWT(ScalingFilter, hLength, WaveletFilter, gLength, x + colidx, height, stride);
+  }
 }
 
 void invconvWT_2d(FilterSet* filters, double* x, int width, int height, int stride)

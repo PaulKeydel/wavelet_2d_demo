@@ -25,7 +25,7 @@ static FilterSet FilterTaubmann = {
   { 0.045635, -0.028771, -0.295635, 0.557543, -0.295635, -0.028771,  0.045635 },
   { 0.026748, -0.016864, -0.078223,  0.266864, 0.602949,  0.266864, -0.078223, -0.016864, 0.026748 },
   { 0.053496,  0.033728, -0.156446, -0.533728, 1.205898, -0.533728, -0.156446,  0.033728, 0.053496 }
-};
+}; //scale the subbands to preserve energy in terms of l2 norm
 
 //forward declaration of 2D CDF9/7 wavelet transformation methods
 int subband(int row, int col, int width, int height, int stride);
