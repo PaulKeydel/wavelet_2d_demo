@@ -20,10 +20,11 @@ int calcBitdepth(int* x, int n)
 
 double calcLambda(int stepSize)
 {
-  //double res = 3.392 * stepSize * stepSize - 24.93 * stepSize + 53.88;
-  //double res = 2.536 * stepSize * stepSize - 21.27 * stepSize + 76.61;
-  //double res = 2.898 * stepSize * stepSize - 29.36 * stepSize + 113.5;
+#if USE_WAVE_LIFTING
   double res = 2.039 * stepSize * stepSize - 18.02 * stepSize + 66.27;
+#else
+  double res = 1.374 * stepSize * stepSize - 4.027 * stepSize + 1.248;
+#endif
   res = res < 5 ? 5 : res;
   return res;
 }
@@ -130,16 +131,13 @@ void transform(int* src, int width, int height, int stride, int bitdepthIn)
       dsrc[rowidx * width + colidx] = (double)src[rowidx * stride + colidx];
     }
   }
-#if USE_TAUBMANN
-  convWT_2d(&FilterTaubmann, dsrc, width, height, width);
-  int clipMin = -(1 << (bitdepthIn - 1)) + 1;
-  int clipMax = (1 << (bitdepthIn - 1)) - 1;
-#else
-  //convWT_2d(&FilterCDF97, dsrc, width, height, width);
+#if USE_WAVE_LIFTING
   lwt97_2d(dsrc, width, height, width);
+#else
+  convWT_2d(&FilterCDF97, dsrc, width, height, width);
+#endif
   int clipMin = -(1 << bitdepthIn) + 1;
   int clipMax = (1 << bitdepthIn) - 1;
-#endif
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
@@ -160,11 +158,10 @@ void inv_transform(int* src, int width, int height, int stride, int bitdepthOut)
       dsrc[rowidx * width + colidx] = (double)src[rowidx * stride + colidx];
     }
   }
-#if USE_TAUBMANN
-  invconvWT_2d(&FilterTaubmann, dsrc, width, height, width);
-#else
-  //invconvWT_2d(&FilterCDF97, dsrc, width, height, width);
+#if USE_WAVE_LIFTING
   ilwt97_2d(dsrc, width, height, width);
+#else
+  invconvWT_2d(&FilterCDF97, dsrc, width, height, width);
 #endif
   int clipMin = -(1 << (bitdepthOut - 1)) + 1;
   int clipMax = (1 << (bitdepthOut - 1)) - 1;
@@ -568,12 +565,12 @@ void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
 
 void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, bool topMargin, bool leftMargin, double lambda, uchar* binStream, unsigned* bitPos)
 {
-  //adjust quantization step-size (due to different transform scalings)
-#if USE_TAUBMANN
-  int quantSize = stepSize;
-#else
+  //adjust quantization step-size regarding transform scaling
   int quantSize = stepSize << 1;
-#endif
+
+  //check minimum trafo block size
+  assert(MAX_BLOCK_SIZE >> ENC_MAX_DEPTH >= 16);
+
   int bestDepth     = -1;
   int* bestPreds    = (int*)malloc((1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH) * sizeof(int));
   int* bestCuttings = (int*)malloc((1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH) * sizeof(int));
@@ -590,12 +587,9 @@ void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* re
 
 void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, bool topMargin, bool leftMargin, uchar* binStream, unsigned* bitPos)
 {
-  //adjust quantization step-size (due to different transform scalings)
-#if USE_TAUBMANN
-  int quantSize = stepSize;
-#else
+  //adjust quantization step-size regarding transform scaling
   int quantSize = stepSize << 1;
-#endif
+
   int partDepth  = -1;
   int* predModes = (int*)malloc((1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH) * sizeof(int));
   int* cutModes  = (int*)malloc((1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH) * sizeof(int));

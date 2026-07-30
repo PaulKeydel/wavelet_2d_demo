@@ -6,7 +6,7 @@ typedef unsigned char uchar;
 //config
 #define IMG_BITDEPTH     8
 #define MAX_BLOCK_SIZE   128
-#define USE_TAUBMANN     0
+#define USE_WAVE_LIFTING 1
 //encoder related config
 #define ENC_MAX_DEPTH    3
 #define ENC_SPECIAL_CUT  1

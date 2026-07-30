@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <math.h>
+#include <assert.h>
 #include "w97.h"
 
 
@@ -28,23 +29,25 @@ void convWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLeng
   double* tempbank = (double*)malloc(n * sizeof(double));
   for (int i = 0; i < n; i++)
   {
-    tempbank[i] = 0;
+    tempbank[i] = 0.0;
   }
+  int filtershift_lo = (hLength-1) / 2;
+  int filtershift_hi = (gLength-1) / 2 - 1;
   for (int j = 0; j < n/2; j++)
   {
     for (int k = 0; k < hLength; k++)
     {
       //symmetric padding before convolution
-      int idx = 2 * j + k - (hLength-1)/2;
-      if (idx < 0) idx = abs(idx);
-      if (idx >= n) idx = 2 * n - 2 - idx;
+      int idx = 2 * j + k - filtershift_lo;
+      if (idx < 0) idx = abs(idx) - 1;
+      if (idx >= n) idx = 2 * n - 1 - idx;
       tempbank[j] += ScalingFilter[k] * signal[idx * stride];
     }
     for (int k = 0; k < gLength; k++)
     {
-      int idx = 2 * j + k - (gLength-1)/2 + 1;
-      if (idx < 0) idx = abs(idx);
-      if (idx >= n) idx = 2 * n - 2 - idx;
+      int idx = 2 * j + k - filtershift_hi;
+      if (idx < 0) idx = abs(idx) - 1;
+      if (idx >= n) idx = 2 * n - 1 - idx;
       tempbank[j + n/2] += WaveletFilter[k] * signal[idx * stride];
     }
   }
@@ -60,30 +63,30 @@ void invconvWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gL
   double* tempbank = (double*)malloc(n * sizeof(double));
   for (int i = 0; i < n; i++)
   {
-    tempbank[i] = 0;
+    tempbank[i] = 0.0;
   }
+  int filtershift_lo = (hLength-1) / 2;
+  int filtershift_hi = (gLength-1) / 2;
   for (int j = 0; j < n; j++)
   {
     for (int k = 0; k < hLength; k++)
     {
-      int idx = j + k - (hLength-1)/2;
+      int idx = j + k - filtershift_lo;
       if (idx % 2 == 0)
       {
-        if (idx < 0) idx = abs(idx);
-        if (idx >= n) idx = 2 * n - 2 - idx;
-        idx /= 2;
-        tempbank[j] += ScalingFilter[k] * trafo[idx * stride];
+        if (idx < 0) idx = abs(idx) - 1;
+        if (idx >= n) idx = 2 * n - 1 - idx;
+        tempbank[j] += ScalingFilter[k] * trafo[(idx/2) * stride];
       }
     }
     for (int k = 0; k < gLength; k++)
     {
-      int idx = j + k - (gLength-1)/2;
+      int idx = j + k - filtershift_hi;
       if (idx % 2 == 1)
       {
-        if (idx < 0) idx = abs(idx);
-        if (idx >= n) idx = 2 * n - 2 - idx;
-        idx /= 2;
-        tempbank[j] += WaveletFilter[k] * trafo[(idx + n/2) * stride];
+        if (idx < 0) idx = abs(idx) - 1;
+        if (idx >= n) idx = 2 * n - 1 - idx;
+        tempbank[j] += WaveletFilter[k] * trafo[(idx/2 + n/2) * stride];
       }
     }
   }

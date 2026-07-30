@@ -5,10 +5,10 @@ import struct
 import numpy as np
 import math
 import matplotlib.pyplot as plt
-import pywt
 from pylab import cm
 from eval_RD import RDeval
 from decode import (decode_full, write_cfg_overview)
+from wavelet_trafos import *
 
 def run_compression(binImg: str, width: int, height: int, quantSize: int) -> tuple[float, float]:
     os.chdir("comp_demo")
@@ -241,23 +241,21 @@ class DemoTrafo:
         #close current opened plot window
         plt.close()
         #generate a simple signal (a combination of two sine waves)
-        t = np.linspace(0, 1, 500, endpoint=False)  # Time vector
-        signal = 10 * (np.sin(2 * np.pi * 10 * t) + np.sin(2 * np.pi * 50 * t * t))  # Signal
+        t, signal = generate_test_signal()
 
         #perform 1-Level DWT decomposition using Haar wavelet
-        cA1, cD1 = pywt.wavedec(signal, 'haar', level=1)
-        #perform 3-Level DWT decomposition using Haar wavelet
-        #cA3, cD3, cD2, cD1 = pywt.wavedec(signal, 'haar', level=3)
+        trafo = convWT(FilterSet_CDF97["h_ana"], 9, FilterSet_CDF97["g_ana"], 7, signal, use_C_implementation=True)
+        cA1 = trafo[:(len(trafo)//2)]
+        cD1 = trafo[(len(trafo)//2):]
 
         #quantization with stepsize qs
         qs = 12
-        qcA1 = qs * np.round(cA1 / qs)
-        qcD1 = qs * np.round(cD1 / qs)
+        qcA1 = list(qs * np.round(np.array(cA1) / qs))
+        qcD1 = list(qs * np.round(np.array(cD1) / qs))
 
         #perform DWT reconstruction for quantized and non-quantized coeffs
-        reco_orig = pywt.waverec([cA1, cD1], wavelet='haar')
-        #reco_orig = pywt.waverec([cA3, cD3, cD2, cD1], wavelet='haar')
-        reco_quant = pywt.waverec([qcA1, qcD1], wavelet='haar')
+        reco_orig = invconvWT(FilterSet_CDF97["h_syn"], 7, FilterSet_CDF97["g_syn"], 9, cA1 + cD1, use_C_implementation=True)
+        reco_quant = invconvWT(FilterSet_CDF97["h_syn"], 7, FilterSet_CDF97["g_syn"], 9, qcA1 + qcD1, use_C_implementation=True)
 
         #plot the original signal and the decomposition results
         fig, axs = plt.subplots(5, 1, figsize=(10, 10), layout='constrained')
