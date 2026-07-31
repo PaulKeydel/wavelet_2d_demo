@@ -4,26 +4,6 @@
 #include "w97.h"
 
 
-int subband(int row, int col, int width, int height, int stride)
-{
-  if ((row < height / 2) && (col < width / 2))
-  {
-    return SUBBAND_LL;
-  }
-  else if ((row < height / 2) && (col >= width / 2))
-  {
-    return SUBBAND_LH;
-  }
-  else if ((row >= height / 2) && (col < width / 2))
-  {
-    return SUBBAND_HL;
-  }
-  else
-  {
-    return SUBBAND_HH;
-  }
-}
-
 void convWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLength, double* signal, int n, int stride)
 {
   double* tempbank = (double*)malloc(n * sizeof(double));

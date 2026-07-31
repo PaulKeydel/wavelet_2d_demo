@@ -1,10 +1,4 @@
-//subband types
-#define SUBBAND_LL   0
-#define SUBBAND_LH   1
-#define SUBBAND_HL   2
-#define SUBBAND_HH   3
-
-//different sets of filters
+//datatype for biorthogonal wavelet filter banks
 typedef struct
 {
   double h_syn[7];
@@ -13,6 +7,7 @@ typedef struct
   double g_syn[9];
 } FilterSet;
 
+//non-scaling CDF9/7 filter (bior4.4)
 static FilterSet FilterCDF97 = {
   { -0.064538, -0.040688, 0.418091,  0.788485, 0.418091, -0.040688, -0.064538 },
   { -0.064538,  0.040688, 0.418091, -0.788485, 0.418091,  0.040688, -0.064538 },
@@ -20,15 +15,15 @@ static FilterSet FilterCDF97 = {
   { -0.037827, -0.023849,  0.110624, 0.377403, -0.852699, 0.377403,  0.110624, -0.023849, -0.037827 }
 };
 
+//bior4.4 version that scales the coefficients (in order to preserve energy in terms of l2 norm)
 static FilterSet FilterTaubmann = {
   { -0.091270, -0.057542,  0.591270, 1.115086,  0.591270, -0.057542, -0.091270 },
   { 0.045635, -0.028771, -0.295635, 0.557543, -0.295635, -0.028771,  0.045635 },
   { 0.026748, -0.016864, -0.078223,  0.266864, 0.602949,  0.266864, -0.078223, -0.016864, 0.026748 },
   { 0.053496,  0.033728, -0.156446, -0.533728, 1.205898, -0.533728, -0.156446,  0.033728, 0.053496 }
-}; //scale the subbands to preserve energy in terms of l2 norm
+};
 
 //forward declaration of 2D CDF9/7 wavelet transformation methods
-int subband(int row, int col, int width, int height, int stride);
 //via lifting scheme
 void ilwt97_2d(double* x, int width, int height, int stride);
 void lwt97_2d(double* x, int width, int height, int stride);

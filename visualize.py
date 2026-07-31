@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from pylab import cm
 from eval_RD import RDeval
 from decode import (decode_full, write_cfg_overview)
-from wavelet_trafos import *
+from wavelet_trafos import (convWT, invconvWT, generate_test_signal)
 
 def run_compression(binImg: str, width: int, height: int, quantSize: int) -> tuple[float, float]:
     os.chdir("comp_demo")
@@ -242,20 +242,18 @@ class DemoTrafo:
         plt.close()
         #generate a simple signal (a combination of two sine waves)
         t, signal = generate_test_signal()
+        half_len = len(signal) // 2
 
         #perform 1-Level DWT decomposition using Haar wavelet
-        trafo = convWT(FilterSet_CDF97["h_ana"], 9, FilterSet_CDF97["g_ana"], 7, signal, use_C_implementation=True)
-        cA1 = trafo[:(len(trafo)//2)]
-        cD1 = trafo[(len(trafo)//2):]
+        trafo = convWT(signal, use_C_implementation=True)
 
         #quantization with stepsize qs
-        qs = 12
-        qcA1 = list(qs * np.round(np.array(cA1) / qs))
-        qcD1 = list(qs * np.round(np.array(cD1) / qs))
+        qs = 10
+        quant = list(qs * np.round(np.array(trafo, dtype=float) / qs))
 
         #perform DWT reconstruction for quantized and non-quantized coeffs
-        reco_orig = invconvWT(FilterSet_CDF97["h_syn"], 7, FilterSet_CDF97["g_syn"], 9, cA1 + cD1, use_C_implementation=True)
-        reco_quant = invconvWT(FilterSet_CDF97["h_syn"], 7, FilterSet_CDF97["g_syn"], 9, qcA1 + qcD1, use_C_implementation=True)
+        reco_orig = invconvWT(trafo, use_C_implementation=True)
+        reco_quant = invconvWT(quant, use_C_implementation=True)
 
         #plot the original signal and the decomposition results
         fig, axs = plt.subplots(5, 1, figsize=(10, 10), layout='constrained')
@@ -269,29 +267,29 @@ class DemoTrafo:
         axs[0].set_xlabel("Time (s)")
         axs[0].set_ylabel("Amplitude")
 
+        xlim_left = -24.9 / 500
+        xlim_right = 522.9 / 500
         #plot the approximation coefficients at level 1
-        axs[1].plot(cA1, label="non-quantized", color=c1)
-        axs[1].plot(qcA1, label="quantized", color=c2)
+        axs[1].plot(t[:len(t)//2], trafo[:half_len], label="non-quantized", linewidth=0.9, color=c1)
+        axs[1].plot(t[:len(t)//2], quant[:half_len], label="quantized", linewidth=0.9, color=c2)
+        axs[1].set_xlim(xlim_left, xlim_right)
         axs[1].set_title("DWT: Approximation coefficients in subspace V")
 
         #plot the detail coefficients at level 1
-        axs[2].plot(cD1, color=c1)
-        axs[2].plot(qcD1, color=c2)
+        axs[2].plot(t[:len(t)//2], trafo[half_len:], linewidth=0.9, color=c1)
+        axs[2].plot(t[:len(t)//2], quant[half_len:], linewidth=0.9, color=c2)
+        axs[2].set_xlim(xlim_left, xlim_right)
         axs[2].set_title("DWT: Detail coefficients in subspace W")
 
         #plot signal reconstruction
         axs[3].plot(t, signal, linewidth=1.5, linestyle='dashed', color=c0)
         axs[3].plot(t, reco_orig, linewidth=1.0, color=c1)
         axs[3].set_title("Signal reconstruction vs. Original")
-        axs[3].set_xlabel("Time (s)")
-        axs[3].set_ylabel("Amplitude")
 
         #plot quantized reconstruction
         axs[4].plot(t, signal, linewidth=1.5, linestyle='dashed', color=c0)
         axs[4].plot(t, reco_quant, linewidth=1.0, color=c2)
         axs[4].set_title("Quantized reconstruction vs. Original")
-        axs[4].set_xlabel("Time (s)")
-        axs[4].set_ylabel("Amplitude")
 
         fig.legend(loc='outside right lower')
 

@@ -24,6 +24,12 @@ typedef unsigned char uchar;
 #define CUT_LH_HL_HH 2
 #define NUM_CUTTINGS 3
 
+//2-dim trafo subband types
+#define SUBBAND_LL   0
+#define SUBBAND_LH   1
+#define SUBBAND_HL   2
+#define SUBBAND_HH   3
+
 //macros for bit manipulation on unsigned char array
 #define setBit(arr,k,val) ( arr[(k/8)] = (val == 1) ? arr[(k/8)] | (1 << (7 - (k%8))) : arr[(k/8)] & ~(1 << (7 - (k%8))) )
 #define checkBit(arr,k)   ( (arr[(k/8)] >> (7 - (k%8))) & 1 )
@@ -33,6 +39,7 @@ int calcBitdepth(int* x, int n);
 double calcLambda(int stepSize);
 unsigned long mse_dist(int* src, int* reco, int width, int height, int stride);
 int clipLR(int val, int min, int max);
+int w2D_subband(int row, int col, int width, int height, int stride);
 void array_to_file(const char* fname, const void* data, int typeSize, int len);
 void array_from_file(const char* fname, void* data, int typeSize, int len);
 //add or subtract prediction
