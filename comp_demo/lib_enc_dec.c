@@ -6,18 +6,6 @@
 #include "w97.h"
 
 
-int calcBitdepth(int* x, int n)
-{
-  int max = 0;
-  int min = 0;
-  for (int i = 0; i < n; i++)
-  {
-    if (x[i] > max) max = x[i];
-    if (x[i] < min) min = x[i];
-  }
-  return (int)floor(log2((double)(max - min))) + 1;
-}
-
 double calcLambda(int stepSize)
 {
 #if USE_WAVE_LIFTING
@@ -29,30 +17,53 @@ double calcLambda(int stepSize)
   return res;
 }
 
-unsigned long mse_dist(int* src, int* reco, int width, int height, int stride)
+int calcBitdepth(int* src, int n)
+{
+  if (n == 1)
+  {
+    return (int)floor(log2((double)abs(*src))) + 1;
+  }
+  int max = INT32_MIN;
+  int min = INT32_MAX;
+  for (int i = 0; i < n; i++)
+  {
+    if (src[i] > max) max = src[i];
+    if (src[i] < min) min = src[i];
+  }
+  return (int)floor(log2((double)(max - min))) + 1;
+}
+
+unsigned long mse_dist(int* src, int* ref, int width, int height, int stride)
 {
   unsigned long dist = 0UL;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      dist += ((src[rowidx * stride + colidx] - reco[rowidx * stride + colidx]) * (src[rowidx * stride + colidx] - reco[rowidx * stride + colidx]));
+      dist += ((src[rowidx * stride + colidx] - ref[rowidx * stride + colidx]) * (src[rowidx * stride + colidx] - ref[rowidx * stride + colidx]));
     }
   }
   return dist;
 }
 
-int clipLR(int val, int min, int max)
+void clipLR(int* src, int width, int height, int stride, int min, int max)
 {
-  if (val > max)
+  for (int rowidx = 0; rowidx < height; rowidx++)
   {
-    return max;
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      int val = src[rowidx * stride + colidx];
+      if (val > max)
+      {
+        val = max;
+      }
+      if (val < min)
+      {
+        val = min;
+      }
+      src[rowidx * stride + colidx] = val;
+    }
   }
-  if (val < min)
-  {
-    return min;
-  }
-  return val;
 }
 
 int w2D_subband(int row, int col, int width, int height, int stride)
@@ -99,49 +110,42 @@ void array_from_file(const char* fname, void* data, int typeSize, int len)
   fclose(fp);
 }
 
-void predict(int predMode, int* reco, int* dst, int* resi, int width, int height, int stride, bool hasLeft, bool hasTop, int bitdepth)
+void predict(int predMode, int* reco, int* pred, int* resi, int width, int height, int stride, bool hasLeft, bool hasTop)
 {
-  int defaultPred = 1 << (bitdepth - 1);
+  int defaultPred = 1 << (IMG_BITDEPTH - 1);
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      int pred = 0;
-      if (predMode == PRED_CONST)
+      int predVal = defaultPred;
+      if (predMode == PRED_HOR)
       {
-        pred = defaultPred;
-      }
-      else if (predMode == PRED_HOR)
-      {
-        pred = hasLeft ? reco[rowidx * stride - 1] : defaultPred;
+        predVal = hasLeft ? reco[rowidx * stride - 1] : defaultPred;
       }
       else if (predMode == PRED_VER)
       {
-        pred = hasTop ? reco[colidx - stride] : defaultPred;
+        predVal = hasTop ? reco[colidx - stride] : defaultPred;
       }
       else if (predMode == PRED_DIAG)
       {
-        pred = ((hasLeft ? reco[rowidx * stride - 1] : defaultPred) + (hasTop ? reco[colidx - stride] : defaultPred)) >> 1;
+        predVal = ((hasLeft ? reco[rowidx * stride - 1] : defaultPred) + (hasTop ? reco[colidx - stride] : defaultPred)) >> 1;
       }
-      //store prediction signal
-      if (dst != NULL)
+      //store prediction signal and calculate residual
+      if (pred != NULL && resi != NULL)
       {
-        dst[rowidx * stride + colidx] = pred;
+        pred[rowidx * stride + colidx] = predVal;
+        resi[rowidx * stride + colidx] = resi[rowidx * stride + colidx] - predVal;
       }
-      //subtract or add prediction value
-      if (resi != NULL)
-      {
-        resi[rowidx * stride + colidx] = clipLR(resi[rowidx * stride + colidx] - pred, -(1 << bitdepth) + 1, (1 << bitdepth) - 1);
-      }
+      //update current reconstruction value
       else
       {
-        reco[rowidx * stride + colidx] = clipLR(reco[rowidx * stride + colidx] + pred, 0, (1 << bitdepth) - 1);
+        reco[rowidx * stride + colidx] += predVal;
       }
     }
   }
 }
 
-void transform(int* src, int width, int height, int stride, int bitdepthIn)
+void transform(int* src, int width, int height, int stride)
 {
   double* dsrc = (double*)malloc(width * height * sizeof(double));
   for (int rowidx = 0; rowidx < height; rowidx++)
@@ -154,21 +158,19 @@ void transform(int* src, int width, int height, int stride, int bitdepthIn)
 #if USE_WAVE_LIFTING
   lwt97_2d(dsrc, width, height, width);
 #else
-  convWT_2d(&FilterCDF97, dsrc, width, height, width);
+  convWT_2d(dsrc, width, height, width);
 #endif
-  int clipMin = -(1 << bitdepthIn) + 1;
-  int clipMax = (1 << bitdepthIn) - 1;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      src[rowidx * stride + colidx] = clipLR((int)round(dsrc[rowidx * width + colidx]), clipMin, clipMax);
+      src[rowidx * stride + colidx] = (int)round(dsrc[rowidx * width + colidx]);
     }
   }
   free(dsrc);
 }
 
-void inv_transform(int* src, int width, int height, int stride, int bitdepthOut)
+void inv_transform(int* src, int width, int height, int stride)
 {
   double* dsrc = (double*)malloc(width * height * sizeof(double));
   for (int rowidx = 0; rowidx < height; rowidx++)
@@ -181,15 +183,13 @@ void inv_transform(int* src, int width, int height, int stride, int bitdepthOut)
 #if USE_WAVE_LIFTING
   ilwt97_2d(dsrc, width, height, width);
 #else
-  invconvWT_2d(&FilterCDF97, dsrc, width, height, width);
+  invconvWT_2d(dsrc, width, height, width);
 #endif
-  int clipMin = -(1 << (bitdepthOut - 1)) + 1;
-  int clipMax = (1 << (bitdepthOut - 1)) - 1;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      src[rowidx * stride + colidx] = clipLR((int)round(dsrc[rowidx * width + colidx]), clipMin, clipMax);
+      src[rowidx * stride + colidx] = (int)round(dsrc[rowidx * width + colidx]);
     }
   }
   free(dsrc);
@@ -220,7 +220,6 @@ void dequantize(int* src, int width, int height, int stride, int quantsize)
 
 unsigned encode_fixlen(int n, int len, uchar* bitsOut, unsigned bitPos)
 {
-  assert(len >= calcBitdepth(&n, 1));
   for (int i = 0; i < len; i++)
   {
     setBit(bitsOut, (bitPos + i), 0);
@@ -433,16 +432,19 @@ unsigned rd_est_bits(int* x, int width, int height, int stride, int cutMode)
 
 void comp_subblk(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, int cutMode, bool topMargin, bool leftMargin)
 {
+  int clipMin = -(1 << bitdepth) + 1;
+  int clipMax = (1 << bitdepth) - 1;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     memcpy(resi + rowidx * stride, x + rowidx * stride, width * sizeof(int));
   }
-  predict(predMode, reco, pred, resi, width, height, stride, leftMargin, topMargin, bitdepth);
+  predict(predMode, reco, pred, resi, width, height, stride, leftMargin, topMargin);
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     memcpy(trafo + rowidx * stride, resi + rowidx * stride, width * sizeof(int));
   }
-  transform(trafo, width, height, stride, bitdepth + 1);
+  transform(trafo, width, height, stride);
+  clipLR(trafo, width, height, stride, clipMin * TRAFO_SCALE_2D, clipMax * TRAFO_SCALE_2D);
   cut_detail_coefs(trafo, width, height, stride, cutMode);
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
@@ -453,13 +455,17 @@ void comp_subblk(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco
 
 void reco_subblk(int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, bool topMargin, bool leftMargin)
 {
+  int clipMin = -(1 << bitdepth) + 1;
+  int clipMax = (1 << bitdepth) - 1;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     memcpy(reco + rowidx * stride, quant + rowidx * stride, width * sizeof(int));
   }
   dequantize(reco, width, height, stride, quantSize);
-  inv_transform(reco, width, height, stride, bitdepth + 1);
-  predict(predMode, reco, NULL, NULL, width, height, stride, leftMargin, topMargin, bitdepth);
+  inv_transform(reco, width, height, stride);
+  clipLR(reco, width, height, stride, clipMin, clipMax);
+  predict(predMode, reco, NULL, NULL, width, height, stride, leftMargin, topMargin);
+  clipLR(reco, width, height, stride, 0, clipMax);
 }
 
 void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, bool topMargin, bool leftMargin, double lambda, int* bestDepth, int* bestPreds, int* bestCuttings)
@@ -586,7 +592,7 @@ void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
 void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, bool topMargin, bool leftMargin, double lambda, uchar* binStream, unsigned* bitPos)
 {
   //adjust quantization step-size regarding transform scaling
-  int quantSize = stepSize << 1;
+  int quantSize = stepSize * TRAFO_SCALE_2D;
 
   //check minimum trafo block size
   assert(MAX_BLOCK_SIZE >> ENC_MAX_DEPTH >= 16);
@@ -608,7 +614,7 @@ void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* re
 void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, bool topMargin, bool leftMargin, uchar* binStream, unsigned* bitPos)
 {
   //adjust quantization step-size regarding transform scaling
-  int quantSize = stepSize << 1;
+  int quantSize = stepSize * TRAFO_SCALE_2D;
 
   int partDepth  = -1;
   int* predModes = (int*)malloc((1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH) * sizeof(int));

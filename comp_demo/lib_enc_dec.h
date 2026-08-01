@@ -34,19 +34,20 @@ typedef unsigned char uchar;
 #define setBit(arr,k,val) ( arr[(k/8)] = (val == 1) ? arr[(k/8)] | (1 << (7 - (k%8))) : arr[(k/8)] & ~(1 << (7 - (k%8))) )
 #define checkBit(arr,k)   ( (arr[(k/8)] >> (7 - (k%8))) & 1 )
 
-//helper functions
-int calcBitdepth(int* x, int n);
+//calculate the Lagrange multiplier from quant size
 double calcLambda(int stepSize);
-unsigned long mse_dist(int* src, int* reco, int width, int height, int stride);
-int clipLR(int val, int min, int max);
+//few helper functions
+int calcBitdepth(int* src, int n);
+unsigned long mse_dist(int* src, int* ref, int width, int height, int stride);
+void clipLR(int* src, int width, int height, int stride, int min, int max);
 int w2D_subband(int row, int col, int width, int height, int stride);
 void array_to_file(const char* fname, const void* data, int typeSize, int len);
 void array_from_file(const char* fname, void* data, int typeSize, int len);
 //add or subtract prediction
-void predict(int predMode, int* reco, int* dst, int* resi, int width, int height, int stride, bool hasLeft, bool hasTop, int bitdepth);
+void predict(int predMode, int* reco, int* pred, int* resi, int width, int height, int stride, bool hasLeft, bool hasTop);
 //transform predicted block and reconstruct original coefficients
-void transform(int* src, int width, int height, int stride, int bitdepthIn);
-void inv_transform(int* src, int width, int height, int stride, int bitdepthOut);
+void transform(int* src, int width, int height, int stride);
+void inv_transform(int* src, int width, int height, int stride);
 //quantize and dequantize
 void quantize(int* src, int width, int height, int stride, int quantsize);
 void dequantize(int* src, int width, int height, int stride, int quantsize);

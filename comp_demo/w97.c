@@ -3,8 +3,24 @@
 #include <assert.h>
 #include "w97.h"
 
+//define the CDF9/7 filter bank
+#if USE_SQRT2_NORMALIZATION
+static const FilterSetBior44 FilterCDF97 = {
+  { -0.064538, -0.040688,  0.418091,  0.788485,  0.418091, -0.040688, -0.064538 }, //syn_low
+  { -0.064538,  0.040688,  0.418091, -0.788485,  0.418091,  0.040688, -0.064538 }, //ana_high
+  {  0.037827, -0.023849, -0.110624,  0.377403,  0.852699,  0.377403, -0.110624, -0.023849,  0.037827 }, //ana_low
+  { -0.037827, -0.023849,  0.110624,  0.377403, -0.852699,  0.377403,  0.110624, -0.023849, -0.037827 } //syn_high
+};
+#else
+static const FilterSetBior44 FilterCDF97 = {
+  { -0.091270, -0.057542,  0.591270,  1.115086,  0.591270, -0.057542, -0.091270 },
+  { -0.045635,  0.028771,  0.295635, -0.557543,  0.295635,  0.028771, -0.045635 },
+  {  0.026748, -0.016864, -0.078223,  0.266864,  0.602949,  0.266864, -0.078223, -0.016864,  0.026748 },
+  { -0.053496, -0.033728,  0.156446,  0.533728, -1.205898,  0.533728,  0.156446, -0.033728, -0.053496 }
+};
+#endif
 
-void convWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLength, double* signal, int n, int stride)
+void convWT(const double* ScalingFilter, int hLength, const double* WaveletFilter, int gLength, double* signal, int n, int stride)
 {
   double* tempbank = (double*)malloc(n * sizeof(double));
   for (int i = 0; i < n; i++)
@@ -38,7 +54,7 @@ void convWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLeng
   free(tempbank);
 }
 
-void invconvWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gLength, double* trafo, int n, int stride)
+void invconvWT(const double* ScalingFilter, int hLength, const double* WaveletFilter, int gLength, double* trafo, int n, int stride)
 {
   double* tempbank = (double*)malloc(n * sizeof(double));
   for (int i = 0; i < n; i++)
@@ -77,11 +93,11 @@ void invconvWT(double* ScalingFilter, int hLength, double* WaveletFilter, int gL
   free(tempbank);
 }
 
-void convWT_2d(FilterSet* filters, double* x, int width, int height, int stride)
+void convWT_2d(double* x, int width, int height, int stride)
 {
-  double* ScalingFilter = filters->h_ana;
+  const double* ScalingFilter = FilterCDF97.h_ana;
   int hLength = 9;
-  double* WaveletFilter = filters->g_ana;
+  const double* WaveletFilter = FilterCDF97.g_ana;
   int gLength = 7;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
@@ -93,11 +109,11 @@ void convWT_2d(FilterSet* filters, double* x, int width, int height, int stride)
   }
 }
 
-void invconvWT_2d(FilterSet* filters, double* x, int width, int height, int stride)
+void invconvWT_2d(double* x, int width, int height, int stride)
 {
-  double* ScalingFilter = filters->h_syn;
+  const double* ScalingFilter = FilterCDF97.h_syn;
   int hLength = 7;
-  double* WaveletFilter = filters->g_syn;
+  const double* WaveletFilter = FilterCDF97.g_syn;
   int gLength = 9;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
@@ -111,59 +127,114 @@ void invconvWT_2d(FilterSet* filters, double* x, int width, int height, int stri
 
 void lwt97(double* x, int n, int stride)
 {
-  double a;
-  int i;
-    
   //predict 1
-  a = -1.586134342;
-  for (i = 1*stride; i < (n-2)*stride; i += 2*stride)
+  double a = -1.586134342;
+  for (int i = stride; i < (n - 2) * stride; i += 2*stride)
   {
-    x[i] += a*(x[i-stride]+x[i+stride]);
+    x[i] += a * (x[i - stride] + x[i + stride]);
   }
-  x[(n-1)*stride] += 2*a*x[(n-2)*stride];
+  x[(n - 1) * stride] += 2 * a * x[(n - 2) * stride];
   
   //update 1
   a = -0.05298011854;
-  for (i = 2*stride; i < (n-1)*stride; i += 2*stride)
+  for (int i = 2 * stride; i < (n - 1) * stride; i += 2*stride)
   {
-    x[i] += a*(x[i-stride]+x[i+stride]);
+    x[i] += a * (x[i - stride] + x[i + stride]);
   }
-  x[0] += 2*a*x[stride];
+  x[0] += 2 * a * x[stride];
   
   //predict 2
   a = 0.8829110762;
-  for (i = 1*stride; i < (n-2)*stride; i += 2*stride)
+  for (int i = stride; i < (n - 2) * stride; i += 2*stride)
   {
-    x[i] += a*(x[i-stride]+x[i+stride]);
+    x[i] += a * (x[i - stride] + x[i + stride]);
   }
-  x[(n-1)*stride] += 2*a*x[(n-2)*stride];
+  x[(n - 1) * stride] += 2 * a * x[(n - 2) * stride];
     
   //update 2
   a = 0.4435068522;
-  for (i = 2*stride; i < (n-1)*stride; i += 2*stride)
+  for (int i = 2 * stride; i < (n - 1) * stride; i += 2*stride)
   {
-    x[i] += a*(x[i-stride]+x[i+stride]);
+    x[i] += a * (x[i - stride] + x[i + stride]);
   }
-  x[0] += 2*a*x[stride];
+  x[0] += 2 * a * x[stride];
   
   //scale
-  //a=1.230174;
-  a = 1/1.149604398; //sqrt2 normalization
-  for (i = 0; i < n ; i++)
+  a = 1/1.149604398;
+  for (int i = 0; i < n ; i++)
   {
-      if (i%2) x[i*stride] *= -a; //divide by 2 for Taubmann
-      else x[i*stride] /= a;
+    if (i % 2 == 0) x[i * stride] /= a;
+    if (i % 2 == 1) x[i * stride] *= -a;
+#if !USE_SQRT2_NORMALIZATION
+    x[i * stride] /= sqrt(2);
+#endif
   }
   
   //pack
-  double* tempbank = (double *)malloc(n*sizeof(double));
-  for (i = 0; i < n; i++)
+  double* tempbank = (double*)malloc(n * sizeof(double));
+  for (int i = 0; i < n; i++)
   {
-    if (i%2 == 0) tempbank[i/2] = x[i*stride];
-    else tempbank[n/2+i/2] = x[i*stride];
+    if (i % 2 == 0) tempbank[i / 2] = x[i * stride];
+    if (i % 2 == 1) tempbank[n/2 + i/2] = x[i * stride];
   }
-  for (i = 0; i < n; i++) x[i*stride] = tempbank[i];
+  for (int i = 0; i < n; i++) x[i * stride] = tempbank[i];
   free(tempbank);
+}
+
+void ilwt97(double* x, int n, int stride)
+{
+  //unpack
+  double* tempbank = (double*)malloc(n * sizeof(double));
+  for (int i = 0; i < n/2; i++)
+  {
+    tempbank[i * 2] = x[i * stride];
+    tempbank[i * 2 + 1] = x[(i + n/2) * stride];
+  }
+  for (int i = 0; i < n; i++) x[i * stride] = tempbank[i];
+  free(tempbank);
+  
+  //undo scale
+  double a = 1.149604398;
+  for (int i = 0; i < n; i++)
+  {
+    if (i % 2 == 0) x[i * stride] /= a;
+    if (i % 2 == 1) x[i * stride] *= -a;
+#if !USE_SQRT2_NORMALIZATION
+    x[i * stride] *= sqrt(2);
+#endif
+  }
+  
+  //undo update 2
+  a = -0.4435068522;
+  for (int i = 2 * stride; i < (n - 1) * stride; i += 2*stride)
+  {
+    x[i] += a * (x[i - stride] + x[i + stride]);
+  }
+  x[0] += 2 * a * x[stride];
+  
+  //undo predict 2
+  a = -0.8829110762;
+  for (int i = stride; i < (n - 2) * stride; i += 2*stride)
+  {
+    x[i] += a * (x[i - stride] + x[i + stride]);
+  }
+  x[(n - 1) * stride] += 2 * a * x[(n - 2) * stride];
+  
+  //undo update 1
+  a = 0.05298011854;
+  for (int i = 2 * stride; i < (n - 1) * stride; i += 2*stride)
+  {
+    x[i] += a * (x[i - stride] + x[i + stride]);
+  }
+  x[0] += 2 * a * x[stride];
+  
+  //undo predict 1
+  a = 1.586134342;
+  for (int i = stride; i < (n - 2) * stride; i += 2*stride)
+  {
+    x[i] += a * (x[i - stride] + x[i + stride]);
+  } 
+  x[(n - 1) * stride] += 2 * a * x[(n - 2) * stride];
 }
 
 void lwt97_2d(double* x, int width, int height, int stride)
@@ -176,63 +247,6 @@ void lwt97_2d(double* x, int width, int height, int stride)
   {
     lwt97(x + colidx, height, stride);
   }
-}
-
-void ilwt97(double* x, int n, int stride)
-{
-  double a;
-  int i;
-  
-  //unpack
-  double* tempbank = (double *)malloc(n*sizeof(double));
-  for (i = 0; i < n/2; i++)
-  {
-    tempbank[i*2] = x[i*stride];
-    tempbank[i*2 + 1] = x[(i+n/2)*stride];
-  }
-  for (i = 0; i < n; i++) x[i*stride] = tempbank[i];
-  free(tempbank);
-  
-  //undo scale
-  //a=1/1.230174;
-  a = 1.149604398; //sqrt2 normalization
-  for (i = 0; i < n; i++)
-  {
-    if (i%2) x[i*stride] *= -a; //multiply by 2a for Taubmann
-    else x[i*stride] /= a;
-  }
-  
-  //undo update 2
-  a = -0.4435068522;
-  for (i = 2*stride; i < (n-1)*stride; i += 2*stride)
-  {
-    x[i] += a*(x[i-stride]+x[i+stride]);
-  }
-  x[0] += 2*a*x[stride];
-  
-  //undo predict 2
-  a = -0.8829110762;
-  for (i = 1*stride; i < (n-2)*stride; i += 2*stride)
-  {
-    x[i] += a*(x[i-stride]+x[i+stride]);
-  }
-  x[(n-1)*stride] += 2*a*x[(n-2)*stride];
-  
-  //undo update 1
-  a = 0.05298011854;
-  for (i = 2*stride; i < (n-1)*stride; i += 2*stride)
-  {
-    x[i] += a*(x[i-stride]+x[i+stride]);
-  }
-  x[0] += 2*a*x[stride];
-  
-  //undo predict 1
-  a = 1.586134342;
-  for (i = 1*stride; i < (n-2)*stride; i += 2*stride)
-  {
-    x[i] += a*(x[i-stride]+x[i+stride]);
-  } 
-  x[(n-1)*stride] += 2*a*x[(n-2)*stride];
 }
 
 void ilwt97_2d(double* x, int width, int height, int stride)
