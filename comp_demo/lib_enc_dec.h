@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdbool.h>
-
-typedef unsigned char uchar;
+#include "lib_bin_coding.h"
 
 //config
 #define IMG_BITDEPTH     8
@@ -30,9 +29,6 @@ typedef unsigned char uchar;
 #define SUBBAND_HL   2
 #define SUBBAND_HH   3
 
-//macros for bit manipulation on unsigned char array
-#define setBit(arr,k,val) ( arr[(k/8)] = (val == 1) ? arr[(k/8)] | (1 << (7 - (k%8))) : arr[(k/8)] & ~(1 << (7 - (k%8))) )
-#define checkBit(arr,k)   ( (arr[(k/8)] >> (7 - (k%8))) & 1 )
 
 //calculate the Lagrange multiplier from quant size
 double calcLambda(int stepSize);
@@ -52,10 +48,6 @@ void inv_transform(int* src, int width, int height, int stride);
 void quantize(int* src, int width, int height, int stride, int quantsize);
 void dequantize(int* src, int width, int height, int stride, int quantsize);
 //encoding and decoding
-unsigned encode_fixlen(int n, int len, uchar* bitsOut, unsigned bitPos);
-unsigned decode_fixlen(int len, uchar* bitsIn, unsigned bitPos, int* n);
-unsigned encode_huffman(int n, uchar* bitsOut, unsigned bitPos);
-unsigned decode_huffman(uchar* bitsIn, unsigned bitPos, int* n);
 unsigned encode_coding_params(int width, int height, int stepSize, uchar* bitsOut, unsigned bitPos);
 unsigned decode_coding_params(uchar* bitsIn, unsigned bitPos, int* width, int* height, int* stepSize);
 unsigned encode_unit(int* quant, int stride, int partDepth, int* predModes, int* cutModes, uchar* binStream, unsigned bitPos);
