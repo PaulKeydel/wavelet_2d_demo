@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdbool.h>
-#include "lib_bin_coding.h"
+#include "lib_typedefs.h"
 
 //config
 #define IMG_BITDEPTH     8
@@ -34,9 +34,9 @@
 double calcLambda(int stepSize);
 //few helper functions
 int calcBitdepth(int* src, int n);
-unsigned long mse_dist(int* src, int* ref, int width, int height, int stride);
+ulong mse_dist(int* src, int* ref, int width, int height, int stride);
 void clipLR(int* src, int width, int height, int stride, int min, int max);
-int w2D_subband(int row, int col, int width, int height, int stride);
+int subband_at_pos(int row, int col, int width, int height, int stride);
 void array_to_file(const char* fname, const void* data, int typeSize, int len);
 void array_from_file(const char* fname, void* data, int typeSize, int len);
 //add or subtract prediction

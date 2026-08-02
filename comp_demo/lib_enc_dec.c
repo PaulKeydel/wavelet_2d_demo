@@ -4,6 +4,7 @@
 #include <math.h>
 #include "lib_enc_dec.h"
 #include "w97.h"
+#include "lib_bin_coding.h"
 
 
 double calcLambda(int stepSize)
@@ -19,23 +20,20 @@ double calcLambda(int stepSize)
 
 int calcBitdepth(int* src, int n)
 {
-  if (n == 1)
-  {
-    return (int)floor(log2((double)abs(*src))) + 1;
-  }
-  int max = INT32_MIN;
-  int min = INT32_MAX;
-  for (int i = 0; i < n; i++)
+  int max = src[0];
+  int min = src[0];
+  for (int i = 1; i < n; i++)
   {
     if (src[i] > max) max = src[i];
     if (src[i] < min) min = src[i];
   }
-  return (int)floor(log2((double)(max - min))) + 1;
+  int ref = (n == 1 ? abs(*src) : (max - min));
+  return (int)floor(log2((double)ref)) + 1;
 }
 
-unsigned long mse_dist(int* src, int* ref, int width, int height, int stride)
+ulong mse_dist(int* src, int* ref, int width, int height, int stride)
 {
-  unsigned long dist = 0UL;
+  ulong dist = 0UL;
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
@@ -66,7 +64,7 @@ void clipLR(int* src, int width, int height, int stride, int min, int max)
   }
 }
 
-int w2D_subband(int row, int col, int width, int height, int stride)
+int subband_at_pos(int row, int col, int width, int height, int stride)
 {
   if ((row < height / 2) && (col < width / 2))
   {
@@ -223,7 +221,7 @@ unsigned encode_coding_params(int width, int height, int stepSize, uchar* bitsOu
   encode_fixlen(width, 12, bitsOut, bitPos);
   encode_fixlen(height, 12, bitsOut, bitPos + 12);
   encode_fixlen(stepSize, 8, bitsOut, bitPos + 24);
-  return 32;
+  return 32U;
 }
 
 unsigned decode_coding_params(uchar* bitsIn, unsigned bitPos, int* width, int* height, int* stepSize)
@@ -231,7 +229,7 @@ unsigned decode_coding_params(uchar* bitsIn, unsigned bitPos, int* width, int* h
   decode_fixlen(12, bitsIn, bitPos, width);
   decode_fixlen(12, bitsIn, bitPos + 12, height);
   decode_fixlen(8, bitsIn, bitPos + 24, stepSize);
-  return 32;
+  return 32U;
 }
 
 unsigned encode_unit(int* quant, int stride, int partDepth, int* predModes, int* cutModes, uchar* binStream, unsigned bitPos)
@@ -254,11 +252,12 @@ unsigned encode_unit(int* quant, int stride, int partDepth, int* predModes, int*
     {
       for (int colidx = col; colidx < (col + blkWidth); colidx++)
       {
-        if (cutModes[subblk] == CUT_HH && w2D_subband(rowidx % blkSize, colidx % blkSize, blkSize, blkSize, stride) == SUBBAND_HH)
+        int currSubband = subband_at_pos(rowidx % blkSize, colidx % blkSize, blkSize, blkSize, stride);
+        if (cutModes[subblk] == CUT_HH && currSubband == SUBBAND_HH)
         {
           continue;
         }
-        else if (cutModes[subblk] == CUT_LH_HL_HH && w2D_subband(rowidx % blkSize, colidx % blkSize, blkSize, blkSize, stride) != SUBBAND_LL)
+        else if (cutModes[subblk] == CUT_LH_HL_HH && currSubband != SUBBAND_LL)
         {
           continue;
         }
@@ -298,11 +297,12 @@ unsigned decode_unit(uchar* binStream, unsigned bitPos, int* quant, int stride, 
     {
       for (int colidx = col; colidx < (col + blkWidth); colidx++)
       {
-        if (cutModes[subblk] == CUT_HH && w2D_subband(rowidx % blkSize, colidx % blkSize, blkSize, blkSize, stride) == SUBBAND_HH)
+        int currSubband = subband_at_pos(rowidx % blkSize, colidx % blkSize, blkSize, blkSize, stride);
+        if (cutModes[subblk] == CUT_HH && currSubband == SUBBAND_HH)
         {
           *(quant + rowidx * stride + colidx) = 0;
         }
-        else if (cutModes[subblk] == CUT_LH_HL_HH && w2D_subband(rowidx % blkSize, colidx % blkSize, blkSize, blkSize, stride) != SUBBAND_LL)
+        else if (cutModes[subblk] == CUT_LH_HL_HH && currSubband != SUBBAND_LL)
         {
           *(quant + rowidx * stride + colidx) = 0;
         }
@@ -331,11 +331,12 @@ void cut_detail_coefs(int* src, int width, int height, int stride, int cutMode)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      if (cutMode == CUT_HH && w2D_subband(rowidx, colidx, width, height, stride) == SUBBAND_HH)
+      int currSubband = subband_at_pos(rowidx, colidx, width, height, stride);
+      if (cutMode == CUT_HH && currSubband == SUBBAND_HH)
       {
         src[rowidx * stride + colidx] = 0;
       }
-      else if (cutMode == CUT_LH_HL_HH && w2D_subband(rowidx, colidx, width, height, stride) != SUBBAND_LL)
+      else if (cutMode == CUT_LH_HL_HH && currSubband != SUBBAND_LL)
       {
         src[rowidx * stride + colidx] = 0;
       }
@@ -345,24 +346,25 @@ void cut_detail_coefs(int* src, int width, int height, int stride, int cutMode)
 
 unsigned rd_est_bits(int* x, int width, int height, int stride, int cutMode)
 {
-  unsigned long bits = 4UL; //4 bits for coding pred mode und cutting mode
+  unsigned bits = 4U; //4 bits for coding pred mode und cutting mode
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
+      int currSubband = subband_at_pos(rowidx, colidx, width, height, stride);
       //Huffman coding all relevant subbands
-      if (cutMode == CUT_HH && w2D_subband(rowidx, colidx, width, height, stride) == SUBBAND_HH)
+      if (cutMode == CUT_HH && currSubband == SUBBAND_HH)
       {
         continue;
       }
-      else if (cutMode == CUT_LH_HL_HH && w2D_subband(rowidx, colidx, width, height, stride) != SUBBAND_LL)
+      else if (cutMode == CUT_LH_HL_HH && currSubband != SUBBAND_LL)
       {
         continue;
       }
       else
       {
         int absVal = abs(x[rowidx * stride + colidx]);
-        bits += (unsigned long)(absVal == 0 ? 1 : absVal + 2);
+        bits += (unsigned)(absVal == 0 ? 1 : absVal + 2);
       }
     }
   }
@@ -537,8 +539,9 @@ void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* re
   assert(MAX_BLOCK_SIZE >> ENC_MAX_DEPTH >= 16);
 
   int bestDepth     = -1;
-  int* bestPreds    = (int*)malloc((1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH) * sizeof(int));
-  int* bestCuttings = (int*)malloc((1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH) * sizeof(int));
+  int subUnitsMax   = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
+  int* bestPreds    = (int*)malloc(subUnitsMax * sizeof(int));
+  int* bestCuttings = (int*)malloc(subUnitsMax * sizeof(int));
 
   rd_search_unit(x, pred, resi, trafo, quant, reco, stride, IMG_BITDEPTH, quantSize, topMargin, leftMargin, lambda, &bestDepth, bestPreds, bestCuttings);
 
@@ -555,9 +558,10 @@ void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, bool topM
   //adjust quantization step-size regarding transform scaling
   int quantSize = stepSize * TRAFO_SCALE_2D;
 
-  int partDepth  = -1;
-  int* predModes = (int*)malloc((1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH) * sizeof(int));
-  int* cutModes  = (int*)malloc((1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH) * sizeof(int));
+  int partDepth   = -1;
+  int subUnitsMax = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
+  int* predModes  = (int*)malloc(subUnitsMax * sizeof(int));
+  int* cutModes   = (int*)malloc(subUnitsMax * sizeof(int));
 
   *bitPos += decode_unit(binStream, *bitPos, quant, stride, &partDepth, predModes, cutModes);
 

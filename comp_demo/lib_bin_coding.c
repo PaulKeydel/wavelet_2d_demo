@@ -2,6 +2,11 @@
 #include "lib_bin_coding.h"
 
 
+//macros for bit manipulation on unsigned char array
+#define setBit(arr,k,val) ( arr[(k/8)] = (val == 1) ? arr[(k/8)] | (1 << (7 - (k%8))) : arr[(k/8)] & ~(1 << (7 - (k%8))) )
+#define checkBit(arr,k)   ( (arr[(k/8)] >> (7 - (k%8))) & 1 )
+
+
 unsigned encode_fixlen(int n, int len, uchar* bitsOut, unsigned bitPos)
 {
   for (int i = 0; i < len; i++)
