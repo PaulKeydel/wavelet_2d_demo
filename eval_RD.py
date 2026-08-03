@@ -32,27 +32,26 @@ class RDeval:
         self.points = np.column_stack((bitlen, dist))
 
     def get_conv_hull(self) -> tuple[np.ndarray, np.ndarray]:
-        pr = self.points[np.argmin(self.bitlen)]
-        pd = self.points[np.argmin(self.dist)]
+        idx_min_rate = np.argmin(self.bitlen)
+        idx_min_dist = np.argmin(self.dist)
+        pr = self.points[idx_min_rate]
+        pd = self.points[idx_min_dist]
         lin_thres = np.vectorize(lambda rate: (pr[1] - pd[1]) * (rate - pr[0]) / (pr[0] - pd[0]) + pr[1])
 
-        fmask = lin_thres(self.bitlen) >= self.dist
-        idx_map = (fmask * np.arange(len(self.points)))[fmask]
+        fmask = self.dist < lin_thres(self.bitlen)
+        fmask[idx_min_rate] = True
+        fmask[idx_min_dist] = True
+        idx_map = np.arange(len(self.points))[fmask]
 
         hull = ConvexHull(self.points[fmask])
         vertices = idx_map[hull.vertices]
-        vertices = sorted(vertices, key=lambda x: self.bitlen[x])
+        vertices = np.array(sorted(vertices, key=lambda x: self.bitlen[x]))
+        simplices = np.array([idx_map[s] for s in hull.simplices])
 
-        simplices = list()
-        for s in hull.simplices:
-            simplex = idx_map[s]
-            p0 = [self.points[simplex, 0][0], self.points[simplex, 1][0]]
-            p1 = [self.points[simplex, 0][1], self.points[simplex, 1][1]]
-            if ((p0 == pr).all() and (p1 == pd).all()) or ((p0 == pd).all() and (p1 == pr).all()):
-                continue
-            simplices.append(simplex)
+        idx_ex = np.where((simplices == [idx_min_rate, idx_min_dist]).all(axis=-1) | (simplices == [idx_min_dist, idx_min_rate]).all(axis=-1))[0]
+        simplices = np.delete(simplices, idx_ex, axis=0)
         assert(len(vertices) - 1 == len(simplices))
-        return vertices, np.array(simplices)
+        return vertices, simplices
 
     def calc_slopes(self, vertices: np.ndarray) -> np.ndarray:
         slopes = np.empty(len(self.points))
