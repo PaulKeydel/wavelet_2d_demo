@@ -20,6 +20,7 @@ read -p "Key? " -n 1 choice
 echo
 if [ "$choice" = "j" ]; then 
     echo "Running Jupyter..."
+    open /Applications/Firefox.app/Contents/MacOS/firefox
     jupyter-notebook visualize_nb.ipynb
 elif [ "$choice" = "v" ]; then
     #visualize intra-coding (i.e. prediction, transformation, quantization) and RD-optimization

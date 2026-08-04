@@ -237,7 +237,7 @@ class DemoEncoding:
 
 class DemoTrafo:
     @staticmethod
-    def visualize(save_as: str = ""):
+    def visualize(quantSize: int, save_as: str = ""):
         #close current opened plot window
         plt.close()
         #generate a simple signal (a combination of two sine waves)
@@ -248,7 +248,7 @@ class DemoTrafo:
         trafo = convWT(signal, use_C_implementation=True)
 
         #quantization with stepsize qs
-        qs = 10
+        qs = quantSize
         quant = list(qs * np.round(np.array(trafo, dtype=float) / qs))
 
         #perform DWT reconstruction for quantized and non-quantized coeffs
@@ -353,6 +353,25 @@ class DemoRD:
                 print("File '" + save_as + "' saved...")
 
 
+### stuff for Jupyter demo notebook
+from ipywidgets import IntSlider, interact
+
+def interact_fig(demo_class, slide_default):
+    qs_slider = IntSlider(value=slide_default, min=2, max=64)
+
+    def update(quantsize, demo_class):
+        if demo_class.__name__ == "DemoSteps":
+            demo_class.visualize("astronaut.bin", 512, 512, quantsize)
+        if demo_class.__name__ == "DemoTrafo":
+            demo_class.visualize(quantsize)
+        if demo_class.__name__ == "DemoEncoding":
+            demo_class.visualize("astronaut.bin", 512, 512, quantsize)
+
+    x = lambda quantsize: update(quantsize, demo_class)
+    interact(x, quantsize=qs_slider)
+###
+
+
 if __name__ == "__main__":
     img_path = "visuals"
     if not os.path.exists(img_path):
@@ -372,6 +391,6 @@ if __name__ == "__main__":
     DemoSteps.visualize("camera.bin", 512, 512, quantSize=4, save_as=svg_steps_exp3)
     DemoSteps.visualize("camera.bin", 512, 512, quantSize=16, save_as=svg_steps_exp4)
     DemoPrediction.visualize(save_as=svg_prediction)
-    DemoTrafo.visualize(save_as=svg_transform)
+    DemoTrafo.visualize(quantSize=10, save_as=svg_transform)
     DemoEncoding.visualize("astronaut.bin", 512, 512, quantSize=8, save_as=svg_encoding)
     DemoRD.visualize("astronaut.bin", 512, 512, save_as=svg_lagrange)
