@@ -329,7 +329,7 @@ class DemoRD:
             for vertex in vertices:
                 if costs[vertex] > 1.0:
                     continue
-                lbl = " quantSize: " + str(rd.qs[vertex]) + " lambda: " + str(rd.lambdas[vertex]) + " (" + "{:.2f}".format(lambdas[vertex] if lambdas[vertex] > 5 else 5.0) + ")"
+                lbl = "P(quantSize: " + str(rd.qs[vertex]) + ", lambda: " + "{:.2f}".format(lambdas[vertex]) + ")"
                 plt.text(rd.points[vertex, 0] - 0.1, rd.points[vertex, 1], lbl, horizontalalignment="right")
                 if figMode == 0:
                     continue
@@ -337,10 +337,9 @@ class DemoRD:
                 m_orth = -1 / slopes[vertex]
                 x_tickz = np.array([p[0] - 0.1, p[0] + 0.3])
                 plt.plot(x_tickz, m_orth * (x_tickz - p[0]) + p[1], "g:")
-            #plt.gca().set_yscale("log")
             plt.colorbar()
-            plt.xlabel("Mittlere Code-Länge [Bits/Pixel]")
-            plt.ylabel("Mittlerer quadratischer Fehler [1/Pixel]")
+            plt.xlabel("Average number of bits [Bits/Pixel]")
+            plt.ylabel("Average squared error [1/Pixel]")
             plt.title(title)
 
             if save_as == "":

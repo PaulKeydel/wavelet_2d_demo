@@ -11,9 +11,8 @@ class RDeval:
         dist    = list()
         bitlen  = list()
         qs      = list()
-        lambdas = list()
         self.range_quant = np.arange(4, 25, 4)
-        self.range_lagr  = np.arange(25, 1550, 75)
+        self.range_lagr  = np.arange(10, 1000, 40)
         for quantSize in self.range_quant:
             for lagrMult in self.range_lagr:
                 os.chdir("comp_demo")
@@ -26,11 +25,9 @@ class RDeval:
                 dist.append(float(output.split("\n")[1].split(" ")[-1]))
                 bitlen.append(float(output.split("\n")[2].split(" ")[-1]))
                 qs.append(quantSize)
-                lambdas.append(lagrMult)
         self.bitlen = np.array(bitlen)
         self.dist   = np.array(dist)
         self.qs     = np.array(qs)
-        self.lambdas = np.array(lambdas)
         self.points = np.column_stack((bitlen, dist))
 
     def get_conv_hull(self) -> tuple[np.ndarray, np.ndarray]:
