@@ -12,8 +12,10 @@ class RDeval:
         bitlen  = list()
         qs      = list()
         lambdas = list()
-        for quantSize in range(4, 25, 4):
-            for lagrMult in range(25, 1550, 75):
+        self.range_quant = np.arange(4, 25, 4)
+        self.range_lagr  = np.arange(25, 1550, 75)
+        for quantSize in self.range_quant:
+            for lagrMult in self.range_lagr:
                 os.chdir("comp_demo")
                 command = "./comp_demo ../" + binImg + " " + str(width) + " " + str(height) + " " + str(quantSize) + " " + str(lagrMult)
                 p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
@@ -54,54 +56,57 @@ class RDeval:
         return vertices, simplices
 
     def calc_slopes(self, vertices: np.ndarray) -> np.ndarray:
-        slopes = np.empty(len(self.points))
+        range_qs  = self.range_quant
+        slopes    = np.empty(len(self.points))
+        qs_hull   = self.qs[vertices]
+        dist_hull = self.dist[vertices]
+        rate_hull = self.bitlen[vertices]
+
         slopes.fill(np.nan)
         for i, vertex in enumerate(vertices):
-            p = self.points[vertex]
-            pl = None
-            pr = None
-            slope = None
-            if (i > 0) and (i < len(vertices) - 1):
-                pl = self.points[vertices[i - 1]]
-                pr = self.points[vertices[i + 1]]
-                slope = (pr[1] - pl[1]) / (pr[0] - pl[0])
-            elif i == 0:
-                pr = self.points[vertices[i + 1]]
-                slope = (pr[1] - p[1]) / (pr[0] - p[0])
-            elif i == len(vertices) - 1:
-                pl = self.points[vertices[i - 1]]
-                slope = (p[1] - pl[1]) / (p[0] - pl[0])
-            slopes[vertex] = slope
+            qs = qs_hull[i]
+            qs_prev = qs
+            qs_next = qs
+            if qs > range_qs.min():
+                qs_prev = range_qs[np.where(range_qs == qs)[0][0] - 1]
+            if qs < range_qs.max():
+                qs_next = range_qs[np.where(range_qs == qs)[0][0] + 1]
+            rate0 = rate_hull[qs_hull == qs_prev].mean()
+            dist0 = dist_hull[qs_hull == qs_prev].mean()
+            rate1 = rate_hull[qs_hull == qs_next].mean()
+            dist1 = dist_hull[qs_hull == qs_next].mean()
+            slopes[vertex] = (dist1 - dist0) / (rate1 - rate0)
+
         return slopes
 
-    def interpolate_lambda(self, vertices: np.ndarray, slopes: np.ndarray) -> tuple[np.ndarray, np.poly1d]:
-        qs_hull = list(self.qs[vertices])
-        lambda_hull = list(-(slopes[vertices]))
+    def interpolate_lambda(self, vertices: np.ndarray, slopes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        qs_hull     = self.qs[vertices]
+        lambda_hull = -slopes[vertices]
+
         z = np.polyfit(qs_hull, lambda_hull, 2)
         quad_fit = np.poly1d(z)
-        lambda_vec = np.vectorize(lambda t: quad_fit(t))
-        return lambda_vec(self.qs), quad_fit
+        lambdas = np.apply_along_axis(lambda t: quad_fit(t), 0, self.qs)
 
-    def calc_costs(self, lambdas: np.ndarray) -> np.ndarray:
         costs = self.dist + lambdas * self.bitlen
         minJ = np.array([costs[self.qs == t].min() for t in self.qs])
         costs /= minJ
-        return costs
+        return lambdas, costs
 
 
 if __name__ == "__main__":
     rd = RDeval("astronaut.bin", 512, 512)
     vertices, simplices = rd.get_conv_hull()
     slopes = rd.calc_slopes(vertices)
-    lambdas, quad_fit = rd.interpolate_lambda(vertices, slopes)
-    costs = rd.calc_costs(lambdas)
+    lambdas, costs = rd.interpolate_lambda(vertices, slopes)
 
-    d = {"rate": rd.bitlen, "dist": rd.dist, "qs": rd.qs, "slopes": slopes, "lambdas": -slopes, "lambdas_qs": lambdas, "costs": costs}
-    df = pd.DataFrame(data=d)
+    d = {"rate": rd.bitlen, "dist": rd.dist, "qs": rd.qs, "slopes": slopes, "lambdas": -slopes, "lambda_pred": lambdas, "costs": costs}
+    df_full = pd.DataFrame(data=d)
+    df_hull = df_full.iloc[vertices]
 
-    print(df.drop(["slopes", "lambdas"], axis=1).sort_values(["qs", "dist"], ascending=[True, True]).to_string())
+    print(df_full.drop(["slopes", "lambdas"], axis=1).sort_values(["qs", "dist"], ascending=[True, True]).to_string())
     print()
-    print(df.iloc[vertices].to_string())
+
+    print(df_hull.to_string())
     print()
     print("Lambda prediction from quantization stepsize:")
-    print(quad_fit)
+    print(np.poly1d(np.polyfit(df_hull["qs"], df_hull["lambdas"], 2)))

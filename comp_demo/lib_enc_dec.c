@@ -9,13 +9,9 @@
 
 double calcLambda(int stepSize)
 {
-#if USE_WAVE_LIFTING
-  double res = 2.039 * stepSize * stepSize - 18.02 * stepSize + 66.27;
-#else
-  double res = 1.374 * stepSize * stepSize - 4.027 * stepSize + 1.248;
-#endif
-  res = res < 5 ? 5 : res;
-  return res;
+  double lambda = 2 * (stepSize - 4) * (stepSize - 4) + 28;
+  lambda = stepSize < 4 ? 28 : lambda;
+  return lambda;
 }
 
 int calcBitdepth(int* src, int n)

@@ -310,8 +310,7 @@ class DemoRD:
         rd = RDeval(binImg, width, height)
         vertices, simplices = rd.get_conv_hull()
         slopes = rd.calc_slopes(vertices)
-        lambdas, quad_fit = rd.interpolate_lambda(vertices, slopes)
-        costs = rd.calc_costs(lambdas)
+        lambdas, costs = rd.interpolate_lambda(vertices, slopes)
 
         for figMode in range(2):
             cats = np.ones(len(rd.points))
