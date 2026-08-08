@@ -89,7 +89,7 @@ int main(int argc, char **argv)
   array_to_file("outputs_enc/reco.bin", (const void*)reco, sizeof(int), width * height);
   array_to_file("outputs_enc/bitstream.bin", (const void*)byteStream, sizeof(uchar), binLen / 8);
 
-  //rate-distortion summary where we neglect fixlen-coded parameters
+  //rate-distortion summary for RD analysis with Python
   double totalDist = (double)mse_dist(x, reco, width, height, width);
   double totalBits = (double)binLen;
   printf("Relative distortion (MSE): %f\n", totalDist / (double)(width * height));
