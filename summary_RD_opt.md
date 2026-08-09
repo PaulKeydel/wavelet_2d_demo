@@ -10,7 +10,7 @@ $$
 J = D + \lambda \cdot R \quad \rightarrow \quad \textrm{min}, \quad \lambda \geq 0
 $$
 
-The value $\lambda \geq 0$ is the so-called Lagrangian multiplier and becomes necessary since the output bit rate and the output distortion will not increase/decrease in an ratio of 1:1. Figuratively speaking, we have to add an extra penalty to the bit rate in order to get proper RD costs. In other words, if we know $\lambda$, comparing two compression modes means nothing else than comparing $J(mode1)$ and $J(mode2)$.
+In other words, if we know $\lambda$, comparing two compression modes means nothing else than comparing $J(mode1)$ and $J(mode2)$. The value $\lambda \geq 0$ is the so-called Lagrangian multiplier and becomes necessary since the output bit rate and the output distortion will not increase/decrease in an ratio of 1:1. Figuratively speaking, we have to add an extra penalty to the bit rate in order to get proper RD costs.
 
 However, all compression standards based on rate-distortion-optimization have its own specific Lagrangian multiplier. That is just because different compression algorithms produce different rate-distortion ratios. Consequently, finding the right $\lambda$ is a central task in image compression.
 
@@ -24,11 +24,11 @@ $$
 QS \times \Lambda = \{4 + 4i\}_{i=0}^{5} \times \{10 + 40i\}_{i=0}^{24}
 $$
 
-Applying the encoder on this test space yields the set of corresponding RD points. This point cloud is plotted in the next figure. There we see that $\lambda$-$qs$ combinations sometimes cause "bad", and sometimes "good" compression results. The bad ones have high bit rates and high distortions (upper right corner), whereas combinations with a good compression gain lie in the bottom left corner (low rates and low squared errors). Since we are interested in the best $\lambda$-values, we look for the $(\lambda, qs)$ pairs with associated $(R, D)$ points on the convex hull, which is plotted as solid line.
+Applying the encoder on this test space yields the set of corresponding RD points. This point cloud is plotted in the next figure. There we see that $\lambda$-qs$ combinations sometimes cause "bad", and sometimes "good" compression results. The bad ones have high bit rates and high distortions (upper right corner), whereas combinations with a good compression gain lie in the bottom left corner (low rates and low squared errors). Since we are interested in the best $\lambda$-values, we look for the $(\lambda, qs)$ pairs with associated $(R, D)$ points on the convex hull, which is plotted as solid line.
 
  ![test](visuals/demo_RD.svg)
 
-As in other lossy image coder, on the convex hull we typically have points that only depend on the quantization step size. The corresponding best $\lambda$-values are our desired encoder multiplier and we can generelly estimate them by finding a regression model $\lambda = \lambda({qs}_{best})$. For this kind of image coder, it's also common to discover a quadratic relation between $\lambda_{best}$ and ${qs}_{best}$. For example, looking at the HEVC and VVC standard, one founds
+As in other lossy image coder, on the convex hull we typically have points that only depend on the quantization step size. The corresponding best $\lambda$-values are our desired encoder multiplier and we can generelly estimate them by finding a regression model $\lambda = \lambda ({qs}_{best})$. For this kind of image coder, it's also common to discover a quadratic relation between ${\lambda}_{best}$ and ${qs}_{best}$. For example, looking at the HEVC and VVC standard, one founds
 
 $$
 \begin{align*}
