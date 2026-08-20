@@ -6,7 +6,7 @@ if ! [[ -f ./astronaut.bin && -f ./camera.bin ]]; then
 fi
 
 cd comp_demo
-make clean
+#make clean
 make all
 cd ..
 

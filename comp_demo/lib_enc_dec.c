@@ -526,43 +526,86 @@ void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
   }
 }
 
-void compress_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int stepSize, bool topMargin, bool leftMargin, double lambda, uchar* binStream, unsigned* bitPos)
+void compress_image(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stepSize, double lambda, uchar* binStream, unsigned* bitPos)
 {
-  //adjust quantization step-size regarding transform scaling
-  int quantSize = stepSize * TRAFO_SCALE_2D;
-
   //check minimum trafo block size
   assert(MAX_BLOCK_SIZE >> ENC_MAX_DEPTH >= 16);
 
-  int bestDepth     = -1;
-  int subUnitsMax   = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
-  int* bestPreds    = (int*)malloc(subUnitsMax * sizeof(int));
-  int* bestCuttings = (int*)malloc(subUnitsMax * sizeof(int));
+  //encode width, height and stepsize
+  *bitPos = encode_coding_params(width, height, stepSize, binStream, 0);
 
-  rd_search_unit(x, pred, resi, trafo, quant, reco, stride, IMG_BITDEPTH, quantSize, topMargin, leftMargin, lambda, &bestDepth, bestPreds, bestCuttings);
-
-  comp_reco_unit(x, pred, resi, trafo, quant, reco, stride, IMG_BITDEPTH, quantSize, bestDepth, bestPreds, bestCuttings, topMargin, leftMargin);
-
-  *bitPos += encode_unit(quant, stride, bestDepth, bestPreds, bestCuttings, binStream, *bitPos);
-
-  free(bestPreds);
-  free(bestCuttings);
-}
-
-void reconstruct_unit(int* quant, int* reco, int stride, int stepSize, bool topMargin, bool leftMargin, uchar* binStream, unsigned* bitPos)
-{
   //adjust quantization step-size regarding transform scaling
   int quantSize = stepSize * TRAFO_SCALE_2D;
 
-  int partDepth   = -1;
-  int subUnitsMax = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
-  int* predModes  = (int*)malloc(subUnitsMax * sizeof(int));
-  int* cutModes   = (int*)malloc(subUnitsMax * sizeof(int));
+  int maxNumUnits = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
+  int numUnitsX   = width / MAX_BLOCK_SIZE;
+  int numUnitsY   = height / MAX_BLOCK_SIZE;
+  int numUnits    = numUnitsX * numUnitsY;
+  for (int ui = 0; ui < numUnits; ui++)
+  {
+    bool leftMargin = true;
+    bool topMargin = true;
+    if (ui == 0)
+    {
+      leftMargin = false;
+      topMargin = false;
+    }
+    if (ui != 0 && ui / numUnitsX == 0) topMargin = false;
+    if (ui != 0 && ui % numUnitsX == 0) leftMargin = false;
 
-  *bitPos += decode_unit(binStream, *bitPos, quant, stride, &partDepth, predModes, cutModes);
+    int offset = (ui / numUnitsX) * MAX_BLOCK_SIZE * width + (ui % numUnitsX) * MAX_BLOCK_SIZE;
 
-  comp_reco_unit(NULL, NULL, NULL, NULL, quant, reco, stride, IMG_BITDEPTH, quantSize, partDepth, predModes, cutModes, topMargin, leftMargin);
+    int bestDepth     = -1;
+    int* bestPreds    = (int*)malloc(maxNumUnits * sizeof(int));
+    int* bestCuttings = (int*)malloc(maxNumUnits * sizeof(int));
 
-  free(predModes);
-  free(cutModes);
+    rd_search_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, IMG_BITDEPTH, quantSize, topMargin, leftMargin, lambda, &bestDepth, bestPreds, bestCuttings);
+
+    comp_reco_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, IMG_BITDEPTH, quantSize, bestDepth, bestPreds, bestCuttings, topMargin, leftMargin);
+
+    *bitPos += encode_unit(quant + offset, width, bestDepth, bestPreds, bestCuttings, binStream, *bitPos);
+
+    free(bestPreds);
+    free(bestCuttings);
+  }
+  assert(*bitPos % 8 == 0);
+}
+
+void reconstruct_image(int* quant, int* reco, int* width, int* height, int* stepSize, uchar* binStream, unsigned* bitPos)
+{
+  //decode width, height and stepsize
+  *bitPos = decode_coding_params(binStream, 0, width, height, stepSize);
+
+  //adjust quantization step-size regarding transform scaling
+  int quantSize = *stepSize * TRAFO_SCALE_2D;
+
+  int maxNumUnits = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
+  int numUnitsX   = *width / MAX_BLOCK_SIZE;
+  int numUnitsY   = *height / MAX_BLOCK_SIZE;
+  int numUnits    = numUnitsX * numUnitsY;
+  for (int ui = 0; ui < numUnits; ui++)
+  {
+    bool leftMargin = true;
+    bool topMargin = true;
+    if (ui == 0)
+    {
+      leftMargin = false;
+      topMargin = false;
+    }
+    if (ui != 0 && ui / numUnitsX == 0) topMargin = false;
+    if (ui != 0 && ui % numUnitsX == 0) leftMargin = false;
+
+    int offset = (ui / numUnitsX) * MAX_BLOCK_SIZE * *width + (ui % numUnitsX) * MAX_BLOCK_SIZE;
+
+    int partDepth  = -1;
+    int* predModes = (int*)malloc(maxNumUnits * sizeof(int));
+    int* cutModes  = (int*)malloc(maxNumUnits * sizeof(int));
+
+    *bitPos += decode_unit(binStream, *bitPos, quant + offset, *width, &partDepth, predModes, cutModes);
+
+    comp_reco_unit(NULL, NULL, NULL, NULL, quant + offset, reco + offset, *width, IMG_BITDEPTH, quantSize, partDepth, predModes, cutModes, topMargin, leftMargin);
+
+    free(predModes);
+    free(cutModes);
+  }
 }

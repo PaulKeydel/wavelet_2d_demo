@@ -7,31 +7,6 @@
 #include "lib_enc_dec.h"
 
 
-void compress(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stepSize, double lambda, uchar* byteStream, unsigned* binLen)
-{
-  int numUnitsX = width / MAX_BLOCK_SIZE;
-  int numUnitsY = height / MAX_BLOCK_SIZE;
-  int numUnits  = numUnitsX * numUnitsY;
-  for (int ui = 0; ui < numUnits; ui++)
-  {
-    bool leftMargin = true;
-    bool topMargin = true;
-    if (ui == 0)
-    {
-      leftMargin = false;
-      topMargin = false;
-    }
-    if (ui != 0 && ui / numUnitsX == 0) topMargin = false;
-    if (ui != 0 && ui % numUnitsX == 0) leftMargin = false;
-
-    int offset = (ui / numUnitsX) * MAX_BLOCK_SIZE * width + (ui % numUnitsX) * MAX_BLOCK_SIZE;
-
-    compress_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, stepSize, topMargin, leftMargin, lambda, byteStream, binLen);
-  }
-  assert(*binLen % 8 == 0);
-}
-
-
 int main(int argc, char **argv)
 {
   if (argc != 5 && argc != 6)
@@ -77,8 +52,8 @@ int main(int argc, char **argv)
   memset(byteStream, 0, numBytes);
 
   //find RD-optimized compression mode and do compression + encoding
-  unsigned binLen = encode_coding_params(width, height, stepSize, byteStream, 0);
-  compress(x, pred, resi, trafo, quant, reco, width, height, stepSize, lambda, byteStream, &binLen);
+  unsigned binLen = 0U;
+  compress_image(x, pred, resi, trafo, quant, reco, width, height, stepSize, lambda, byteStream, &binLen);
   //check quantization output in terms of bitdepth
   assert(calcBitdepth(quant, width * height) <= bitdepth + 1 - QP);
 
