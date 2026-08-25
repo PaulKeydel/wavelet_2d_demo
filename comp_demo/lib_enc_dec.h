@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdbool.h>
-#include "lib_typedefs.h"
 
 //config
 #define IMG_BITDEPTH     8
@@ -29,6 +28,8 @@
 #define SUBBAND_HL   2
 #define SUBBAND_HH   3
 
+typedef unsigned char uchar;
+typedef unsigned long ulong;
 
 //calculate the Lagrange multiplier from quant size
 double calcLambda(int stepSize);

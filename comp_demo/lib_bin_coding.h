@@ -1,4 +1,4 @@
-#include "lib_typedefs.h"
+typedef unsigned char uchar;
 
 //fix-length coding
 unsigned encode_fixlen(int n, int len, uchar* bitsOut, unsigned bitPos);
