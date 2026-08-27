@@ -115,8 +115,9 @@ class DemoSteps:
         print("  coef: max=" + str(np.max(coeff)) + " min=" + str(np.min(coeff)))
         print("  resi: max=" + str(np.max(resi)) + " min=" + str(np.min(resi)))
 
-        entr_orig = calc_entropy(orig)
+        entr_orig  = calc_entropy(orig)
         entr_coeff = calc_entropy(coeff)
+        mse_resi   = ((orig - reco) ** 2).mean()
 
         gridsize = 128
         clip_x0 = 0
@@ -166,8 +167,9 @@ class DemoSteps:
         axs[1, 2].xaxis.set_ticks([])
         axs[1, 2].yaxis.set_ticks([])
 
-        txt = "Entropy original image: " + "{:.3f}".format(entr_orig) + "   /   entropy transformed image: " + "{:.3f}".format(entr_coeff)
-        plt.figtext(0.5, 0.01, txt, wrap=True, horizontalalignment='center', fontsize=12)
+        txt1 = "Entropy original image: " + "{:.3f}".format(entr_orig) + "   /   entropy transformed image: " + "{:.3f}".format(entr_coeff)
+        txt2 = "Mean squared error (MSE): " + "{:.3f}".format(mse_resi)
+        plt.figtext(0.5, 0.01, txt1 + "\n" + txt2, wrap=True, horizontalalignment='center', fontsize=12)
 
         if save_as == "":
             plt.show()
@@ -351,25 +353,6 @@ class DemoRD:
                 save_as = save_as if figMode == 0 else save_as[:-4] + "_costs.svg"
                 fig.savefig(save_as, format="svg", bbox_inches="tight", dpi=100)
                 print("File '" + save_as + "' saved...")
-
-
-### stuff for Jupyter demo notebook
-from ipywidgets import IntSlider, interact
-
-def interact_fig(demo_class, slide_default):
-    qs_slider = IntSlider(value=slide_default, min=2, max=64)
-
-    def update(quantsize, demo_class):
-        if demo_class.__name__ == "DemoSteps":
-            demo_class.visualize("astronaut.bin", 512, 512, quantsize)
-        if demo_class.__name__ == "DemoTrafo":
-            demo_class.visualize(quantsize)
-        if demo_class.__name__ == "DemoEncoding":
-            demo_class.visualize("astronaut.bin", 512, 512, quantsize)
-
-    x = lambda quantsize: update(quantsize, demo_class)
-    interact(x, quantsize=qs_slider)
-###
 
 
 if __name__ == "__main__":
