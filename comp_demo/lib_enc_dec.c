@@ -27,7 +27,7 @@ int calcBitdepth(int* src, int n)
   return (int)floor(log2((double)ref)) + 1;
 }
 
-ulong mse_dist(int* src, int* ref, int width, int height, int stride)
+ulong dist_ssd(int* src, int* ref, int width, int height, int stride)
 {
   ulong dist = 0UL;
   for (int rowidx = 0; rowidx < height; rowidx++)
@@ -459,7 +459,7 @@ void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
 
           //estimate bits per unit and calculate MSE
           unsigned int blkBits = rd_est_bits(currQuant, blkWidth, blkHeight, stride, cutMode);
-          unsigned long blkDist = mse_dist(currOrig, currReco, blkWidth, blkHeight, stride);
+          unsigned long blkDist = dist_ssd(currOrig, currReco, blkWidth, blkHeight, stride);
           double blkCost = (double)blkDist + lambda * (double)blkBits;
           if (blkCost < bestCostSubblk)
           {

@@ -35,7 +35,7 @@ typedef unsigned long ulong;
 double calcLambda(int stepSize);
 //few helper functions
 int calcBitdepth(int* src, int n);
-ulong mse_dist(int* src, int* ref, int width, int height, int stride);
+ulong dist_ssd(int* src, int* ref, int width, int height, int stride);
 void clipLR(int* src, int width, int height, int stride, int min, int max);
 int subband_at_pos(int row, int col, int width, int height, int stride);
 void array_to_file(const char* fname, const void* data, int typeSize, int len);

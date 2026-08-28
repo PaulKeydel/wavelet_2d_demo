@@ -65,7 +65,7 @@ int main(int argc, char **argv)
   array_to_file("outputs_enc/bitstream.bin", (const void*)byteStream, sizeof(uchar), binLen / 8);
 
   //rate-distortion summary for RD analysis with Python
-  double totalDist = (double)mse_dist(x, reco, width, height, width);
+  double totalDist = (double)dist_ssd(x, reco, width, height, width);
   double totalBits = (double)binLen;
   printf("Relative distortion (MSE): %f\n", totalDist / (double)(width * height));
   printf("Average symbol length (Bits): %f\n", totalBits / (double)(width * height));
