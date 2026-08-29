@@ -46,7 +46,7 @@ void predict(int predMode, int* reco, int* pred, int* resi, int width, int heigh
 void transform(int* src, int width, int height, int stride);
 void inv_transform(int* src, int width, int height, int stride);
 //quantize and dequantize
-void quantize(int* src, int width, int height, int stride, int quantsize);
+void quantize(int* src, int width, int height, int stride, int quantsize, int cutMode);
 void dequantize(int* src, int width, int height, int stride, int quantsize);
 //encoding and decoding
 unsigned encode_coding_params(int width, int height, int stepSize, uchar* bitsOut, unsigned bitPos);
@@ -54,7 +54,6 @@ unsigned decode_coding_params(uchar* bitsIn, unsigned bitPos, int* width, int* h
 unsigned encode_unit(int* quant, int stride, int partDepth, int* predModes, int* cutModes, uchar* binStream, unsigned bitPos);
 unsigned decode_unit(uchar* binStream, unsigned bitPos, int* quant, int stride, int* partDepth, int* predModes, int* cutModes);
 //compress and reconstruct input image
-void cut_detail_coefs(int* src, int width, int height, int stride, int cutMode);
 unsigned rd_est_bits(int* x, int width, int height, int stride, int cutMode);
 void comp_subblk(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, int cutMode, bool topMargin, bool leftMargin);
 void reco_subblk(int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, bool topMargin, bool leftMargin);

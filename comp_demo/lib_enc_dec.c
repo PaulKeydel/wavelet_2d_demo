@@ -189,14 +189,27 @@ void inv_transform(int* src, int width, int height, int stride)
   free(dsrc);
 }
 
-void quantize(int* src, int width, int height, int stride, int quantsize)
+void quantize(int* src, int width, int height, int stride, int quantsize, int cutMode)
 {
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      int sgn = src[rowidx * stride + colidx] < 0 ? -1 : 1;
-      src[rowidx * stride + colidx] = sgn * (abs(src[rowidx * stride + colidx]) / quantsize);
+      int currSubband = subband_at_pos(rowidx, colidx, width, height, stride);
+      if (cutMode == CUT_HH && currSubband == SUBBAND_HH)
+      {
+        src[rowidx * stride + colidx] = 0;
+      }
+      else if (cutMode == CUT_LH_HL_HH && currSubband != SUBBAND_LL)
+      {
+        src[rowidx * stride + colidx] = 0;
+      }
+      else
+      {
+        //regular quantization
+        int sgn = src[rowidx * stride + colidx] < 0 ? -1 : 1;
+        src[rowidx * stride + colidx] = sgn * (abs(src[rowidx * stride + colidx]) / quantsize);
+      }
     }
   }
 }
@@ -317,29 +330,6 @@ unsigned decode_unit(uchar* binStream, unsigned bitPos, int* quant, int stride, 
   return binLen;
 }
 
-void cut_detail_coefs(int* src, int width, int height, int stride, int cutMode)
-{
-  if (cutMode == CUT_OFF)
-  {
-    return;
-  }
-  for (int rowidx = 0; rowidx < height; rowidx++)
-  {
-    for (int colidx = 0; colidx < width; colidx++)
-    {
-      int currSubband = subband_at_pos(rowidx, colidx, width, height, stride);
-      if (cutMode == CUT_HH && currSubband == SUBBAND_HH)
-      {
-        src[rowidx * stride + colidx] = 0;
-      }
-      else if (cutMode == CUT_LH_HL_HH && currSubband != SUBBAND_LL)
-      {
-        src[rowidx * stride + colidx] = 0;
-      }
-    }
-  }
-}
-
 unsigned rd_est_bits(int* x, int width, int height, int stride, int cutMode)
 {
   unsigned bits = 4U; //4 bits for coding pred mode und cutting mode
@@ -382,12 +372,11 @@ void comp_subblk(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco
   }
   transform(trafo, width, height, stride);
   clipLR(trafo, width, height, stride, clipMin * TRAFO_SCALE_2D, clipMax * TRAFO_SCALE_2D);
-  cut_detail_coefs(trafo, width, height, stride, cutMode);
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     memcpy(quant + rowidx * stride, trafo + rowidx * stride, width * sizeof(int));
   }
-  quantize(quant, width, height, stride, quantSize);
+  quantize(quant, width, height, stride, quantSize, cutMode);
 }
 
 void reco_subblk(int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, bool topMargin, bool leftMargin)
@@ -555,18 +544,18 @@ void compress_image(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
 
     int offset = (ui / numUnitsX) * MAX_BLOCK_SIZE * width + (ui % numUnitsX) * MAX_BLOCK_SIZE;
 
-    int bestDepth     = -1;
-    int* bestPreds    = (int*)malloc(maxNumUnits * sizeof(int));
-    int* bestCuttings = (int*)malloc(maxNumUnits * sizeof(int));
+    int partDepth  = -1;
+    int* predModes = (int*)malloc(maxNumUnits * sizeof(int));
+    int* cutModes  = (int*)malloc(maxNumUnits * sizeof(int));
 
-    rd_search_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, IMG_BITDEPTH, quantSize, topMargin, leftMargin, lambda, &bestDepth, bestPreds, bestCuttings);
+    rd_search_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, IMG_BITDEPTH, quantSize, topMargin, leftMargin, lambda, &partDepth, predModes, cutModes);
 
-    comp_reco_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, IMG_BITDEPTH, quantSize, bestDepth, bestPreds, bestCuttings, topMargin, leftMargin);
+    comp_reco_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, IMG_BITDEPTH, quantSize, partDepth, predModes, cutModes, topMargin, leftMargin);
 
-    *bitPos += encode_unit(quant + offset, width, bestDepth, bestPreds, bestCuttings, binStream, *bitPos);
+    *bitPos += encode_unit(quant + offset, width, partDepth, predModes, cutModes, binStream, *bitPos);
 
-    free(bestPreds);
-    free(bestCuttings);
+    free(predModes);
+    free(cutModes);
   }
   assert(*bitPos % 8 == 0);
 }
