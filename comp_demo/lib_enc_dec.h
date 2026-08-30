@@ -22,11 +22,6 @@
 #define CUT_LH_HL_HH 2
 #define NUM_CUTTINGS 3
 
-//2-dim trafo subband types
-#define SUBBAND_LL   0
-#define SUBBAND_LH   1
-#define SUBBAND_HL   2
-#define SUBBAND_HH   3
 
 typedef unsigned char uchar;
 typedef unsigned long ulong;
@@ -37,7 +32,6 @@ double calcLambda(int stepSize);
 int calcBitdepth(int* src, int n);
 ulong dist_ssd(int* src, int* ref, int width, int height, int stride);
 void clipLR(int* src, int width, int height, int stride, int min, int max);
-int subband_at_pos(int row, int col, int width, int height, int stride);
 void array_to_file(const char* fname, const void* data, int typeSize, int len);
 void array_from_file(const char* fname, void* data, int typeSize, int len);
 //add or subtract prediction

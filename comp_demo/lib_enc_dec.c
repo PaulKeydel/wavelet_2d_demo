@@ -60,26 +60,6 @@ void clipLR(int* src, int width, int height, int stride, int min, int max)
   }
 }
 
-int subband_at_pos(int row, int col, int width, int height, int stride)
-{
-  if ((row < height / 2) && (col < width / 2))
-  {
-    return SUBBAND_LL;
-  }
-  else if ((row < height / 2) && (col >= width / 2))
-  {
-    return SUBBAND_LH;
-  }
-  else if ((row >= height / 2) && (col < width / 2))
-  {
-    return SUBBAND_HL;
-  }
-  else
-  {
-    return SUBBAND_HH;
-  }
-}
-
 void array_to_file(const char* fname, const void* data, int typeSize, int len)
 {
   FILE* fp = fopen(fname, "wb");
@@ -195,12 +175,11 @@ void quantize(int* src, int width, int height, int stride, int quantsize, int cu
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      int currSubband = subband_at_pos(rowidx, colidx, width, height, stride);
-      if (cutMode == CUT_HH && currSubband == SUBBAND_HH)
+      if (cutMode == CUT_HH && (rowidx >= height / 2) && (colidx >= width / 2))
       {
         src[rowidx * stride + colidx] = 0;
       }
-      else if (cutMode == CUT_LH_HL_HH && currSubband != SUBBAND_LL)
+      else if (cutMode == CUT_LH_HL_HH && ((rowidx >= height / 2) || (colidx >= width / 2)))
       {
         src[rowidx * stride + colidx] = 0;
       }
@@ -243,44 +222,38 @@ unsigned decode_coding_params(uchar* bitsIn, unsigned bitPos, int* width, int* h
 
 unsigned encode_unit(int* quant, int stride, int partDepth, int* predModes, int* cutModes, uchar* binStream, unsigned bitPos)
 {
-  unsigned binLen = 0;
   int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
   int blkHeight = MAX_BLOCK_SIZE >> partDepth;
   int blkStride = 1 << partDepth;
   int blkNum    = (1 << partDepth) * (1 << partDepth);
   int blkSize   = MAX_BLOCK_SIZE >> partDepth;
 
+  unsigned binLen = 0;
   binLen += encode_fixlen(partDepth, 3, binStream, bitPos + binLen);
   for (int subblk = 0; subblk < blkNum; subblk++)
   {
     binLen += encode_fixlen(predModes[subblk], 2, binStream, bitPos + binLen);
     binLen += encode_fixlen(cutModes[subblk], 2, binStream, bitPos + binLen);
-    int row = (subblk / blkStride) * blkHeight;
-    int col = (subblk % blkStride) * blkWidth;
-    for (int rowidx = row; rowidx < (row + blkHeight); rowidx++)
+
+    int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;
+    int* currQuant = quant + offset;
+    int* subbandLL = currQuant;
+    int* subbandLH = currQuant + (blkWidth / 2);
+    int* subbandHL = currQuant + (blkHeight / 2) * stride;
+    if (cutModes[subblk] == CUT_HH)
     {
-      for (int colidx = col; colidx < (col + blkWidth); colidx++)
-      {
-        int currSubband = subband_at_pos(rowidx % blkSize, colidx % blkSize, blkSize, blkSize, stride);
-        if (cutModes[subblk] == CUT_HH && currSubband == SUBBAND_HH)
-        {
-          continue;
-        }
-        else if (cutModes[subblk] == CUT_LH_HL_HH && currSubband != SUBBAND_LL)
-        {
-          continue;
-        }
-        else
-        {
-          int symbol = *(quant + rowidx * stride + colidx);
-          binLen += encode_huffman(symbol, binStream, bitPos + binLen);
-        }
-      }
+      binLen += encode_blk_huffman(subbandLL, blkWidth / 2, blkHeight / 2, stride, binStream, bitPos + binLen);
+      binLen += encode_blk_huffman(subbandLH, blkWidth / 2, blkHeight / 2, stride, binStream, bitPos + binLen);
+      binLen += encode_blk_huffman(subbandHL, blkWidth / 2, blkHeight / 2, stride, binStream, bitPos + binLen);
     }
-  }
-  if (binLen % 8 > 0)
-  {
-    binLen += (8 - (binLen % 8));
+    else if (cutModes[subblk] == CUT_LH_HL_HH)
+    {
+      binLen += encode_blk_huffman(subbandLL, blkWidth / 2, blkHeight / 2, stride, binStream, bitPos + binLen);
+    }
+    else
+    {
+      binLen += encode_blk_huffman(currQuant, blkWidth, blkHeight, stride, binStream, bitPos + binLen);
+    }
   }
   return binLen;
 }
@@ -300,33 +273,27 @@ unsigned decode_unit(uchar* binStream, unsigned bitPos, int* quant, int stride, 
   {
     binLen += decode_fixlen(2, binStream, bitPos + binLen, predModes + subblk);
     binLen += decode_fixlen(2, binStream, bitPos + binLen, cutModes + subblk);
-    int row = (subblk / blkStride) * blkHeight;
-    int col = (subblk % blkStride) * blkWidth;
-    for (int rowidx = row; rowidx < (row + blkHeight); rowidx++)
+
+    int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;
+    int* currQuant = quant + offset;
+    int* subbandLL = currQuant;
+    int* subbandLH = currQuant + (blkWidth / 2);
+    int* subbandHL = currQuant + (blkHeight / 2) * stride;
+    if (cutModes[subblk] == CUT_HH)
     {
-      for (int colidx = col; colidx < (col + blkWidth); colidx++)
-      {
-        int currSubband = subband_at_pos(rowidx % blkSize, colidx % blkSize, blkSize, blkSize, stride);
-        if (cutModes[subblk] == CUT_HH && currSubband == SUBBAND_HH)
-        {
-          *(quant + rowidx * stride + colidx) = 0;
-        }
-        else if (cutModes[subblk] == CUT_LH_HL_HH && currSubband != SUBBAND_LL)
-        {
-          *(quant + rowidx * stride + colidx) = 0;
-        }
-        else
-        {
-          binLen += decode_huffman(binStream, bitPos + binLen, quant + rowidx * stride + colidx);
-        }
-      }
+      binLen += decode_blk_huffman(binStream, bitPos + binLen, subbandLL, blkWidth / 2, blkHeight / 2, stride);
+      binLen += decode_blk_huffman(binStream, bitPos + binLen, subbandLH, blkWidth / 2, blkHeight / 2, stride);
+      binLen += decode_blk_huffman(binStream, bitPos + binLen, subbandHL, blkWidth / 2, blkHeight / 2, stride);
+    }
+    else if (cutModes[subblk] == CUT_LH_HL_HH)
+    {
+      binLen += decode_blk_huffman(binStream, bitPos + binLen, subbandLL, blkWidth / 2, blkHeight / 2, stride);
+    }
+    else
+    {
+      binLen += decode_blk_huffman(binStream, bitPos + binLen, currQuant, blkWidth, blkHeight, stride);
     }
   }
-  if (binLen % 8 != 0)
-  {
-    binLen += 8 - (binLen % 8);
-  }
-  assert(binLen % 8 == 0);
   return binLen;
 }
 
@@ -337,13 +304,11 @@ unsigned rd_est_bits(int* x, int width, int height, int stride, int cutMode)
   {
     for (int colidx = 0; colidx < width; colidx++)
     {
-      int currSubband = subband_at_pos(rowidx, colidx, width, height, stride);
-      //Huffman coding all relevant subbands
-      if (cutMode == CUT_HH && currSubband == SUBBAND_HH)
+      if (cutMode == CUT_HH && (rowidx >= height / 2) && (colidx >= width / 2))
       {
         continue;
       }
-      else if (cutMode == CUT_LH_HL_HH && currSubband != SUBBAND_LL)
+      else if (cutMode == CUT_LH_HL_HH && ((rowidx >= height / 2) || (colidx >= width / 2)))
       {
         continue;
       }
@@ -556,6 +521,11 @@ void compress_image(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
 
     free(predModes);
     free(cutModes);
+  }
+  //fill last byte of bitstream
+  if (*bitPos % 8 != 0)
+  {
+    *bitPos += 8 - (*bitPos % 8);
   }
   assert(*bitPos % 8 == 0);
 }

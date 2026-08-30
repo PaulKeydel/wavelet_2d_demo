@@ -14,42 +14,51 @@ def files_equal(path1, path2, chunk=8192):
             if not b1: #both reached EOF 
                 return True
 
-def decode_unit(binstr: list, unit_blk_size: int) -> tuple[int, list, list, np.ndarray, int]:
+def decode_coef(binstr: list, block_size: int) -> np.ndarray:
+    data = np.empty((block_size, block_size))
+    i = 0
+    for row in range(block_size):
+        for col in range(block_size):
+            val = 0
+            while (binstr[i] != 0):
+                val += 1
+                i += 1
+            i += (1 if val == 0 else 2)
+            sgn = 1
+            if val > 0:
+                sgn = (1 if binstr[i - 1] == 1 else -1)
+            data[row, col] = sgn * val
+    del binstr[:i]
+    return data
+
+def decode_unit(binstr: list, unit_blk_size: int) -> tuple[int, list, list, np.ndarray]:
     dec_depth = binstr[0] * 4 + binstr[1] * 2 + binstr[2]
+    del binstr[:3]
+
     blksize   = unit_blk_size >> dec_depth
     blkcount  = 1 << (dec_depth * 2)
     blkstride = 1 << dec_depth
     dec_pred  = [None] * blkcount
     dec_cut   = [None] * blkcount
-    dec_coef  = np.empty((unit_blk_size, unit_blk_size))
-    i         = 3
-    i_last    = 3
+    dec_coef  = np.zeros((unit_blk_size, unit_blk_size))
+
     for bi in range(blkcount):
-        dec_pred[bi] = binstr[i + 0] * 2 + binstr[i + 1]
-        dec_cut[bi]  = binstr[i + 2] * 2 + binstr[i + 3]
-        i += 4
-        i_last += 4
-        blkrow = (bi // blkstride) * blksize
-        blkcol = (bi % blkstride) * blksize
-        for row in range(blkrow, blkrow + blksize):
-            for col in range(blkcol, blkcol + blksize):
-                if ((dec_cut[bi] == 1 and (row % blksize >= blksize // 2 and col % blksize >= blksize // 2)) or
-                    (dec_cut[bi] == 2 and (row % blksize >= blksize // 2 or col % blksize >= blksize // 2))):
-                    dec_coef[row, col] = 0
-                    continue
-                while (binstr[i] != 0):
-                    i += 1
-                dc = i - i_last
-                if dc > 0:
-                    i += 1
-                    dc *= (1 if binstr[i] == 1 else -1)
-                i += 1
-                dec_coef[row, col] = dc
-                i_last = i
-    if i % 8 != 0:
-        i += 8 - (i % 8)
-    assert(i % 8 == 0)
-    return dec_depth, dec_pred, dec_cut, dec_coef, i
+        dec_pred[bi] = binstr[0] * 2 + binstr[1]
+        dec_cut[bi]  = binstr[2] * 2 + binstr[3]
+        del binstr[:4]
+
+        row = (bi // blkstride) * blksize
+        col = (bi % blkstride) * blksize
+        if dec_cut[bi] == 1:
+            dec_coef[row:(row + blksize // 2), col:(col + blksize // 2)] = decode_coef(binstr, blksize // 2)
+            dec_coef[row:(row + blksize // 2), (col + blksize // 2):(col + blksize)] = decode_coef(binstr, blksize // 2)
+            dec_coef[(row + blksize // 2):(row + blksize), col:(col + blksize // 2)] = decode_coef(binstr, blksize // 2)
+        elif dec_cut[bi] == 2:
+            dec_coef[row:(row + blksize // 2), col:(col + blksize // 2)] = decode_coef(binstr, blksize // 2)
+        else:
+            dec_coef[row:(row + blksize), col:(col + blksize)] = decode_coef(binstr, blksize)
+
+    return dec_depth, dec_pred, dec_cut, dec_coef
 
 def decode_full(fname: str, unit_blk_size: int) -> tuple[list, list, list, np.ndarray]:
     binstr = []
@@ -68,17 +77,13 @@ def decode_full(fname: str, unit_blk_size: int) -> tuple[list, list, list, np.nd
     allPreds  = []
     allCuts   = []
     allDepths = []
-    offset = 0
     for ur in range(height // unit_blk_size):
         for uc in range(width // unit_blk_size):
-            currDepth, currPreds, currCuts, currCoef, bits_read = decode_unit(binstr[offset:], unit_blk_size)
-
+            currDepth, currPreds, currCuts, currCoef = decode_unit(binstr, unit_blk_size)
             allDepths.append(currDepth)
             allPreds.append(currPreds)
             allCuts.append(currCuts)
             allCoefs[ur * unit_blk_size : (ur + 1) * unit_blk_size, uc * unit_blk_size : (uc + 1) * unit_blk_size] = currCoef
-
-            offset += bits_read
     return allDepths, allPreds, allCuts, allCoefs
 
 def write_cfg_overview(fname: str):

@@ -66,3 +66,30 @@ unsigned decode_huffman(uchar* bitsIn, unsigned bitPos, int* n)
   }
   return bitlen;
 }
+
+unsigned encode_blk_huffman(int* src, int width, int height, int stride, uchar* bitsOut, unsigned bitPos)
+{
+  unsigned binLen = 0U;
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      int symbol = *(src + rowidx * stride + colidx);
+      binLen += encode_huffman(symbol, bitsOut, bitPos + binLen);
+    }
+  }
+  return binLen;
+}
+
+unsigned decode_blk_huffman(uchar* bitsIn, unsigned bitPos, int* src, int width, int height, int stride)
+{
+  unsigned binLen = 0U;
+  for (int rowidx = 0; rowidx < height; rowidx++)
+  {
+    for (int colidx = 0; colidx < width; colidx++)
+    {
+      binLen += decode_huffman(bitsIn, bitPos + binLen, src + rowidx * stride + colidx);
+    }
+  }
+  return binLen;
+}
