@@ -60,7 +60,7 @@ def decode_unit(binstr: list, unit_blk_size: int) -> tuple[int, list, list, np.n
 
     return dec_depth, dec_pred, dec_cut, dec_coef
 
-def decode_full(fname: str, unit_blk_size: int) -> tuple[list, list, list, np.ndarray]:
+def decode_bitstream(fname: str, unit_blk_size: int) -> tuple[list, list, list, np.ndarray]:
     binstr = []
     with open(fname, "rb") as f:
         coding_params = f.read(4) # 4 header bytes for width, height and quant step-size
@@ -86,22 +86,6 @@ def decode_full(fname: str, unit_blk_size: int) -> tuple[list, list, list, np.nd
             allCoefs[ur * unit_blk_size : (ur + 1) * unit_blk_size, uc * unit_blk_size : (uc + 1) * unit_blk_size] = currCoef
     return allDepths, allPreds, allCuts, allCoefs
 
-def write_cfg_overview(fname: str):
-    bestDepths, bestPreds, bestCuts, coef_intern = decode_full("comp_demo/outputs_enc/bitstream.bin", 128)
-    #check if the Python decoder works correctly
-    buffer = Path("comp_demo/outputs_enc/coeffs.bin").read_bytes()
-    coef_enc = np.reshape(list(struct.unpack('i'*(512 * 512), buffer)), (512, 512))
-    assert((coef_intern == coef_enc).all())
-    #write unit-related config overview in file
-    with open(fname, "w") as f:
-        f.write("Unit-related coding parameters\n")
-        f.write("------------------------------\n")
-        for i in range(len(bestDepths)):
-            f.write("depth: " + str(bestDepths[i]) + "\n")
-            f.write("  preds: " + str(bestPreds[i]) + "\n")
-            f.write("  cuts:  " + str(bestCuts[i]) + "\n")
-        f.close()
-
 
 if __name__ == "__main__":
     for quantSize in range(4, 25, 4):
@@ -116,4 +100,8 @@ if __name__ == "__main__":
         print("Decoding succesful and valid? ", files_equal("outputs_enc/reco.bin", "outputs_dec/reco.bin"))
         os.chdir("..")
 
-    write_cfg_overview("decoded_config.txt")
+        #check if the Python decoder works correctly
+        _, _, _, coef_intern = decode_bitstream("comp_demo/outputs_enc/bitstream.bin", 128)
+        bin_file = Path("comp_demo/outputs_enc/coeffs.bin").read_bytes()
+        coef_enc = np.reshape(list(struct.unpack('i'*(512 * 512), bin_file)), (512, 512))
+        assert((coef_intern == coef_enc).all())

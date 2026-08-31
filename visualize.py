@@ -7,7 +7,7 @@ import math
 import matplotlib.pyplot as plt
 from pylab import cm
 from eval_RD import RDeval
-from decode import (decode_full, write_cfg_overview)
+from decode import decode_bitstream
 from wavelet_trafos import (convWT, invconvWT, generate_test_signal)
 
 def run_compression(binImg: str, width: int, height: int, quantSize: int) -> tuple[float, float]:
@@ -56,6 +56,20 @@ def calc_entropy(message: np.ndarray):
     for i in probs:
         ent -= i * math.log(i, 2)
     return ent
+
+def write_cfg_overview(fname: str):
+    #decode and write unit-related config to file
+    bestDepths, bestPreds, bestCuts, _ = decode_bitstream("comp_demo/outputs_enc/bitstream.bin", 128)
+    with open(fname, "w") as f:
+        f.write("Unit-related coding parameters\n")
+        f.write("------------------------------\n")
+        for i in range(len(bestDepths)):
+            f.write("Unit " + str(i) + "\n")
+            f.write("  depth: " + str(bestDepths[i]) + "\n")
+            f.write("  preds: " + str(bestPreds[i]) + "\n")
+            f.write("  cuts:  " + str(bestCuts[i]) + "\n")
+        f.close()
+        print("Config written to file '" + fname + "'...")
 
 
 class DemoPrediction:
@@ -186,9 +200,8 @@ class DemoEncoding:
 
         run_compression(binImg, width, height, quantSize)
         orig, _, _, _, coeff = load_binaries(width, height)
-        dec_depths, _, _, dec_coefs = decode_full("comp_demo/outputs_enc/bitstream.bin", 128)
+        dec_depths, _, _, dec_coefs = decode_bitstream("comp_demo/outputs_enc/bitstream.bin", 128)
         assert((dec_coefs == coeff).all())
-        write_cfg_overview("decoded_config.txt")
 
         symbols, counts = np.unique(np.abs(dec_coefs), return_counts=True)
         data_huffman = dict(zip(symbols.astype(np.int32), counts))
@@ -367,13 +380,23 @@ if __name__ == "__main__":
     svg_steps_exp4 = img_path + "demo_camera_qs16.svg"
     svg_prediction = img_path + "demo_prediction.svg"
     svg_transform  = img_path + "demo_transform.svg"
-    svg_encoding   = img_path + "demo_encoding.svg"
+    svg_encoding   = img_path + "demo_encoding_qs8.svg"
     svg_lagrange   = img_path + "demo_RD.svg"
+
     DemoSteps.visualize("astronaut.bin", 512, 512, quantSize=4, save_as=svg_steps_exp1)
+    write_cfg_overview(svg_steps_exp1[:-4] + "-cfg.txt")
     DemoSteps.visualize("astronaut.bin", 512, 512, quantSize=16, save_as=svg_steps_exp2)
+    write_cfg_overview(svg_steps_exp2[:-4] + "-cfg.txt")
     DemoSteps.visualize("camera.bin", 512, 512, quantSize=4, save_as=svg_steps_exp3)
+    write_cfg_overview(svg_steps_exp3[:-4] + "-cfg.txt")
     DemoSteps.visualize("camera.bin", 512, 512, quantSize=16, save_as=svg_steps_exp4)
+    write_cfg_overview(svg_steps_exp4[:-4] + "-cfg.txt")
+
     DemoPrediction.visualize(save_as=svg_prediction)
+
     DemoTrafo.visualize(quantSize=10, save_as=svg_transform)
+
     DemoEncoding.visualize("astronaut.bin", 512, 512, quantSize=8, save_as=svg_encoding)
+    write_cfg_overview(svg_encoding[:-4] + "-cfg.txt")
+
     DemoRD.visualize("astronaut.bin", 512, 512, save_as=svg_lagrange)

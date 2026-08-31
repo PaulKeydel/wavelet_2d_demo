@@ -10,7 +10,7 @@ First, the original image is splitted into blocks of same size (biggest block si
 2. Transform the residuum (i.e. original minus prediction) using the CDF9/7 wavelet transform. The resulting coefficients will then be quantized with a given stepsize in order to achieve gainful bitrates.
 ![Trafo demo](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_transform.svg)
 3. Encode the qunatized coefficients using Huffman coding. Note that modern compression algorithms use the more efficient arithmetic coding instead of Huffman.
-![Encoding demo](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_encoding.svg)
+![Encoding demo](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_encoding_qs8.svg)
 4. Use the obtaining distortion and the length of resulting bitstream to calculate the costs (known as RD-optimization). On the basis of RD-costs one can determine the best compression configuration.
 ![RD demo](https://github.com/PaulKeydel/wavelet_2d_demo/blob/main/visuals/demo_RD_costs.svg)
 
