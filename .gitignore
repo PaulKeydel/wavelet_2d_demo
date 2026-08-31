@@ -1,0 +1,5 @@
+astronaut.bin
+camera.bin
+__pycache__/
+comp_demo/obj/
+*.bin
