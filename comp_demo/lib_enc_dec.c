@@ -84,6 +84,24 @@ void array_from_file(const char* fname, void* data, int typeSize, int len)
   fclose(fp);
 }
 
+int partition(int idx, int width, int height, int gridWidth, int stride, bool* hasLeft, bool* hasTop)
+{
+  int blkStride = gridWidth / width;
+  int arrOffset = (idx / blkStride) * height * stride + (idx % blkStride) * width;
+  if (hasLeft == NULL || hasTop == NULL)
+  {
+    return arrOffset;
+  }
+  *hasLeft = false;
+  *hasTop = false;
+  if (idx > 0)
+  {
+    *hasTop = (idx / blkStride == 0 ? false : true);
+    *hasLeft = (idx % blkStride == 0 ? false : true);
+  }
+  return arrOffset;
+}
+
 void predict(int predMode, int* reco, int* pred, int* resi, int width, int height, int stride, bool hasLeft, bool hasTop)
 {
   int defaultPred = 1 << (IMG_BITDEPTH - 1);
@@ -222,20 +240,19 @@ unsigned decode_coding_params(uchar* bitsIn, unsigned bitPos, int* width, int* h
 
 unsigned encode_unit(int* quant, int stride, int partDepth, int* predModes, int* cutModes, uchar* binStream, unsigned bitPos)
 {
-  int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
-  int blkHeight = MAX_BLOCK_SIZE >> partDepth;
-  int blkStride = 1 << partDepth;
-  int blkNum    = (1 << partDepth) * (1 << partDepth);
-  int blkSize   = MAX_BLOCK_SIZE >> partDepth;
-
   unsigned binLen = 0;
   binLen += encode_fixlen(partDepth, 3, binStream, bitPos + binLen);
+
+  int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
+  int blkHeight = MAX_BLOCK_SIZE >> partDepth;
+  int blkNum    = (1 << partDepth) * (1 << partDepth);
+
   for (int subblk = 0; subblk < blkNum; subblk++)
   {
     binLen += encode_fixlen(predModes[subblk], 2, binStream, bitPos + binLen);
     binLen += encode_fixlen(cutModes[subblk], 2, binStream, bitPos + binLen);
 
-    int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;
+    int offset = partition(subblk, blkWidth, blkHeight, MAX_BLOCK_SIZE, stride, NULL, NULL);
     int* currQuant = quant + offset;
     int* subbandLL = currQuant;
     int* subbandLH = currQuant + (blkWidth / 2);
@@ -265,16 +282,14 @@ unsigned decode_unit(uchar* binStream, unsigned bitPos, int* quant, int stride, 
 
   int blkWidth  = MAX_BLOCK_SIZE >> *partDepth;
   int blkHeight = MAX_BLOCK_SIZE >> *partDepth;
-  int blkStride = 1 << *partDepth;
   int blkNum    = (1 << *partDepth) * (1 << *partDepth);
-  int blkSize   = MAX_BLOCK_SIZE >> *partDepth;
 
   for (int subblk = 0; subblk < blkNum; subblk++)
   {
     binLen += decode_fixlen(2, binStream, bitPos + binLen, predModes + subblk);
     binLen += decode_fixlen(2, binStream, bitPos + binLen, cutModes + subblk);
 
-    int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;
+    int offset = partition(subblk, blkWidth, blkHeight, MAX_BLOCK_SIZE, stride, NULL, NULL);
     int* currQuant = quant + offset;
     int* subbandLL = currQuant;
     int* subbandLH = currQuant + (blkWidth / 2);
@@ -322,32 +337,31 @@ unsigned rd_est_bits(int* x, int width, int height, int stride, int cutMode)
   return bits;
 }
 
-void comp_subblk(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, int cutMode, bool topMargin, bool leftMargin)
+void comp_reco_subblk(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, int cutMode, bool topMargin, bool leftMargin)
 {
   int clipMin = -(1 << bitdepth) + 1;
   int clipMax = (1 << bitdepth) - 1;
-  for (int rowidx = 0; rowidx < height; rowidx++)
+  //compress
+  if (x != NULL && pred != NULL && resi != NULL && trafo != NULL)
   {
-    memcpy(resi + rowidx * stride, x + rowidx * stride, width * sizeof(int));
+    for (int rowidx = 0; rowidx < height; rowidx++)
+    {
+      memcpy(resi + rowidx * stride, x + rowidx * stride, width * sizeof(int));
+    }
+    predict(predMode, reco, pred, resi, width, height, stride, leftMargin, topMargin);
+    for (int rowidx = 0; rowidx < height; rowidx++)
+    {
+      memcpy(trafo + rowidx * stride, resi + rowidx * stride, width * sizeof(int));
+    }
+    transform(trafo, width, height, stride);
+    clipLR(trafo, width, height, stride, clipMin * TRAFO_SCALE_2D, clipMax * TRAFO_SCALE_2D);
+    for (int rowidx = 0; rowidx < height; rowidx++)
+    {
+      memcpy(quant + rowidx * stride, trafo + rowidx * stride, width * sizeof(int));
+    }
+    quantize(quant, width, height, stride, quantSize, cutMode);
   }
-  predict(predMode, reco, pred, resi, width, height, stride, leftMargin, topMargin);
-  for (int rowidx = 0; rowidx < height; rowidx++)
-  {
-    memcpy(trafo + rowidx * stride, resi + rowidx * stride, width * sizeof(int));
-  }
-  transform(trafo, width, height, stride);
-  clipLR(trafo, width, height, stride, clipMin * TRAFO_SCALE_2D, clipMax * TRAFO_SCALE_2D);
-  for (int rowidx = 0; rowidx < height; rowidx++)
-  {
-    memcpy(quant + rowidx * stride, trafo + rowidx * stride, width * sizeof(int));
-  }
-  quantize(quant, width, height, stride, quantSize, cutMode);
-}
-
-void reco_subblk(int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, int predMode, bool topMargin, bool leftMargin)
-{
-  int clipMin = -(1 << bitdepth) + 1;
-  int clipMax = (1 << bitdepth) - 1;
+  //reconstruct
   for (int rowidx = 0; rowidx < height; rowidx++)
   {
     memcpy(reco + rowidx * stride, quant + rowidx * stride, width * sizeof(int));
@@ -359,6 +373,31 @@ void reco_subblk(int* quant, int* reco, int width, int height, int stride, int b
   clipLR(reco, width, height, stride, 0, clipMax);
 }
 
+void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, int partDepth, int* predModes, int* cutModes, bool topMargin, bool leftMargin)
+{
+  int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
+  int blkHeight = MAX_BLOCK_SIZE >> partDepth;
+  int blkNum    = (1 << partDepth) * (1 << partDepth);
+  for (int subblk = 0; subblk < blkNum; subblk++)
+  {
+    int predMode = predModes[subblk];
+    int cutMode = cutModes[subblk];
+
+    bool hasLeft, hasTop;
+    int offset = partition(subblk, blkWidth, blkHeight, MAX_BLOCK_SIZE, stride, &hasLeft, &hasTop);
+    hasLeft |= leftMargin;
+    hasTop |= topMargin;
+    int* currOrig  = x != NULL ? x + offset : NULL;
+    int* currPred  = pred != NULL ? pred + offset : NULL;
+    int* currResi  = resi != NULL ? resi + offset : NULL;
+    int* currTrafo = trafo != NULL ? trafo + offset : NULL;
+    int* currQuant = quant + offset;
+    int* currReco  = reco + offset;
+
+    comp_reco_subblk(currOrig, currPred, currResi, currTrafo, currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, cutMode, hasTop, hasLeft);
+  }
+}
+
 void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, bool topMargin, bool leftMargin, double lambda, int* bestDepth, int* bestPreds, int* bestCuttings)
 {
   double bestCost = MAXFLOAT;
@@ -366,36 +405,22 @@ void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
   {
     int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
     int blkHeight = MAX_BLOCK_SIZE >> partDepth;
-    int blkStride = 1 << partDepth;
     int blkNum    = (1 << partDepth) * (1 << partDepth);
     double sumCosts = 0.0;
     int* bestPredsInLevel    = malloc(blkNum * sizeof(int));
     int* bestCuttingsInLevel = malloc(blkNum * sizeof(int));
     for (int subblk = 0; subblk < blkNum; subblk++)
     {
-      bool hasLeft = true;
-      bool hasTop = true;
-      if (subblk == 0)
-      {
-        hasLeft = leftMargin;
-        hasTop = topMargin;
-      }
-      else if (subblk / blkStride == 0)
-      {
-        hasTop = topMargin;
-      }
-      else if (subblk % blkStride == 0)
-      {
-        hasLeft = leftMargin;
-      }
-
-      int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;
-      int* currOrig = x + offset;
-      int* currPred = pred + offset;
-      int* currResi = resi + offset;
+      bool hasLeft, hasTop;
+      int offset = partition(subblk, blkWidth, blkHeight, MAX_BLOCK_SIZE, stride, &hasLeft, &hasTop);
+      hasLeft |= leftMargin;
+      hasTop |= topMargin;
+      int* currOrig  = x + offset;
+      int* currPred  = pred + offset;
+      int* currResi  = resi + offset;
       int* currTrafo = trafo + offset;
       int* currQuant = quant + offset;
-      int* currReco = reco + offset;
+      int* currReco  = reco + offset;
 
       double bestCostSubblk = MAXFLOAT;
       for (int predMode = 0; predMode < NUM_PREDS; predMode++)
@@ -408,8 +433,7 @@ void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
             continue;
           }
 #endif
-          comp_subblk(currOrig, currPred, currResi, currTrafo, currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, cutMode, hasTop, hasLeft);
-          reco_subblk(currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, hasTop, hasLeft);
+          comp_reco_subblk(currOrig, currPred, currResi, currTrafo, currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, cutMode, hasTop, hasLeft);
 
           //estimate bits per unit and calculate MSE
           unsigned int blkBits = rd_est_bits(currQuant, blkWidth, blkHeight, stride, cutMode);
@@ -437,51 +461,12 @@ void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
   }
 }
 
-void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, int partDepth, int* predModes, int* cutModes, bool topMargin, bool leftMargin)
-{
-  int blkWidth  = MAX_BLOCK_SIZE >> partDepth;
-  int blkHeight = MAX_BLOCK_SIZE >> partDepth;
-  int blkStride = 1 << partDepth;
-  int blkNum    = (1 << partDepth) * (1 << partDepth);
-  for (int subblk = 0; subblk < blkNum; subblk++)
-  {
-    bool hasLeft = true;
-    bool hasTop = true;
-    if (subblk == 0)
-    {
-      hasLeft = leftMargin;
-      hasTop = topMargin;
-    }
-    else if (subblk / blkStride == 0)
-    {
-      hasTop = topMargin;
-    }
-    else if (subblk % blkStride == 0)
-    {
-      hasLeft = leftMargin;
-    }
-
-    int predMode = predModes[subblk];
-    int cutMode = cutModes[subblk];
-    int offset = (subblk / blkStride) * blkHeight * stride + (subblk % blkStride) * blkWidth;
-    int* currQuant = quant + offset;
-    int* currReco = reco + offset;
-    //compression: prediction, 9/7 transformtion and quatization
-    if (x != NULL && pred != NULL && resi != NULL && trafo != NULL)
-    {
-      int* currOrig = x + offset;
-      int* currPred = pred + offset;
-      int* currResi = resi + offset;
-      int* currTrafo = trafo + offset;
-      comp_subblk(currOrig, currPred, currResi, currTrafo, currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, cutMode, hasTop, hasLeft);
-    }
-    //decompression
-    reco_subblk(currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, hasTop, hasLeft);
-  }
-}
-
 void compress_image(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stepSize, double lambda, uchar* binStream, unsigned* bitPos)
 {
+  //check geometry
+  assert(width % MAX_BLOCK_SIZE == 0);
+  assert(height % MAX_BLOCK_SIZE == 0);
+  assert((MAX_BLOCK_SIZE & (MAX_BLOCK_SIZE - 1)) == 0);
   //check minimum trafo block size
   assert(MAX_BLOCK_SIZE >> ENC_MAX_DEPTH >= 16);
 
@@ -491,27 +476,16 @@ void compress_image(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
   //adjust quantization step-size regarding transform scaling
   int quantSize = stepSize * TRAFO_SCALE_2D;
 
-  int maxNumUnits = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
-  int numUnitsX   = width / MAX_BLOCK_SIZE;
-  int numUnitsY   = height / MAX_BLOCK_SIZE;
-  int numUnits    = numUnitsX * numUnitsY;
+  int maxBlkInUnit = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
+  int numUnits     = (width / MAX_BLOCK_SIZE) * (height / MAX_BLOCK_SIZE);
   for (int ui = 0; ui < numUnits; ui++)
   {
-    bool leftMargin = true;
-    bool topMargin = true;
-    if (ui == 0)
-    {
-      leftMargin = false;
-      topMargin = false;
-    }
-    if (ui != 0 && ui / numUnitsX == 0) topMargin = false;
-    if (ui != 0 && ui % numUnitsX == 0) leftMargin = false;
-
-    int offset = (ui / numUnitsX) * MAX_BLOCK_SIZE * width + (ui % numUnitsX) * MAX_BLOCK_SIZE;
+    bool leftMargin, topMargin;
+    int offset = partition(ui, MAX_BLOCK_SIZE, MAX_BLOCK_SIZE, width, width, &leftMargin, &topMargin);
 
     int partDepth  = -1;
-    int* predModes = (int*)malloc(maxNumUnits * sizeof(int));
-    int* cutModes  = (int*)malloc(maxNumUnits * sizeof(int));
+    int* predModes = (int*)malloc(maxBlkInUnit * sizeof(int));
+    int* cutModes  = (int*)malloc(maxBlkInUnit * sizeof(int));
 
     rd_search_unit(x + offset, pred + offset, resi + offset, trafo + offset, quant + offset, reco + offset, width, IMG_BITDEPTH, quantSize, topMargin, leftMargin, lambda, &partDepth, predModes, cutModes);
 
@@ -538,27 +512,16 @@ void reconstruct_image(int* quant, int* reco, int* width, int* height, int* step
   //adjust quantization step-size regarding transform scaling
   int quantSize = *stepSize * TRAFO_SCALE_2D;
 
-  int maxNumUnits = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
-  int numUnitsX   = *width / MAX_BLOCK_SIZE;
-  int numUnitsY   = *height / MAX_BLOCK_SIZE;
-  int numUnits    = numUnitsX * numUnitsY;
+  int maxBlkInUnit = (1 << ENC_MAX_DEPTH) * (1 << ENC_MAX_DEPTH);
+  int numUnits     = (*width / MAX_BLOCK_SIZE) * (*height / MAX_BLOCK_SIZE);
   for (int ui = 0; ui < numUnits; ui++)
   {
-    bool leftMargin = true;
-    bool topMargin = true;
-    if (ui == 0)
-    {
-      leftMargin = false;
-      topMargin = false;
-    }
-    if (ui != 0 && ui / numUnitsX == 0) topMargin = false;
-    if (ui != 0 && ui % numUnitsX == 0) leftMargin = false;
-
-    int offset = (ui / numUnitsX) * MAX_BLOCK_SIZE * *width + (ui % numUnitsX) * MAX_BLOCK_SIZE;
+    bool leftMargin, topMargin;
+    int offset = partition(ui, MAX_BLOCK_SIZE, MAX_BLOCK_SIZE, *width, *width, &leftMargin, &topMargin);
 
     int partDepth  = -1;
-    int* predModes = (int*)malloc(maxNumUnits * sizeof(int));
-    int* cutModes  = (int*)malloc(maxNumUnits * sizeof(int));
+    int* predModes = (int*)malloc(maxBlkInUnit * sizeof(int));
+    int* cutModes  = (int*)malloc(maxBlkInUnit * sizeof(int));
 
     *bitPos += decode_unit(binStream, *bitPos, quant + offset, *width, &partDepth, predModes, cutModes);
 
