@@ -24,6 +24,7 @@ int calcBitdepth(int* src, int n)
     if (src[i] < min) min = src[i];
   }
   int ref = (n == 1 ? abs(*src) : (max - min));
+  //in the binary representation of number x, the highest exponent k satisfies 2^k <= x < 2^(k+1)
   return (int)floor(log2((double)ref)) + 1;
 }
 
@@ -398,7 +399,37 @@ void comp_reco_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
   }
 }
 
-void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, bool topMargin, bool leftMargin, double lambda, int* bestDepth, int* bestPreds, int* bestCuttings)
+double rd_search_subblk(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int width, int height, int stride, int bitdepth, int quantSize, bool topMargin, bool leftMargin, double lambda, int partDepth, int* bestPred, int* bestCut)
+{
+  double bestCostSubblk = MAXFLOAT;
+  for (int predMode = 0; predMode < NUM_PREDS; predMode++)
+  {
+    for (int cutMode = 0; cutMode < NUM_CUTTINGS; cutMode++)
+    {
+#if ENC_SPECIAL_CUT
+      if (partDepth == ENC_MAX_DEPTH && cutMode == CUT_LH_HL_HH)
+      {
+        continue;
+      }
+#endif
+      comp_reco_subblk(x, pred, resi, trafo, quant, reco, width, height, stride, bitdepth, quantSize, predMode, cutMode, topMargin, leftMargin);
+
+      //estimate bits per unit and calculate MSE
+      double blkBits = (double)rd_est_bits(quant, width, height, stride, cutMode);
+      double blkDist = (double)dist_ssd(x, reco, width, height, stride);
+      double blkCost = blkDist + lambda * blkBits;
+      if (blkCost < bestCostSubblk)
+      {
+        *bestPred      = predMode;
+        *bestCut       = cutMode;
+        bestCostSubblk = blkCost;
+      }
+    }
+  }
+  return bestCostSubblk;
+}
+
+void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* reco, int stride, int bitdepth, int quantSize, bool topMargin, bool leftMargin, double lambda, int* bestDepth, int* bestPreds, int* bestCuts)
 {
   double bestCost = MAXFLOAT;
   for (int partDepth = 0; partDepth <= ENC_MAX_DEPTH; partDepth++)
@@ -407,8 +438,8 @@ void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
     int blkHeight = MAX_BLOCK_SIZE >> partDepth;
     int blkNum    = (1 << partDepth) * (1 << partDepth);
     double sumCosts = 0.0;
-    int* bestPredsInLevel    = malloc(blkNum * sizeof(int));
-    int* bestCuttingsInLevel = malloc(blkNum * sizeof(int));
+    int* bestPredsInLevel = malloc(blkNum * sizeof(int));
+    int* bestCutsInLevel  = malloc(blkNum * sizeof(int));
     for (int subblk = 0; subblk < blkNum; subblk++)
     {
       bool hasLeft, hasTop;
@@ -422,42 +453,17 @@ void rd_search_unit(int* x, int* pred, int* resi, int* trafo, int* quant, int* r
       int* currQuant = quant + offset;
       int* currReco  = reco + offset;
 
-      double bestCostSubblk = MAXFLOAT;
-      for (int predMode = 0; predMode < NUM_PREDS; predMode++)
-      {
-        for (int cutMode = 0; cutMode < NUM_CUTTINGS; cutMode++)
-        {
-#if ENC_SPECIAL_CUT
-          if (partDepth == ENC_MAX_DEPTH && cutMode == CUT_LH_HL_HH)
-          {
-            continue;
-          }
-#endif
-          comp_reco_subblk(currOrig, currPred, currResi, currTrafo, currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, predMode, cutMode, hasTop, hasLeft);
-
-          //estimate bits per unit and calculate MSE
-          unsigned int blkBits = rd_est_bits(currQuant, blkWidth, blkHeight, stride, cutMode);
-          unsigned long blkDist = dist_ssd(currOrig, currReco, blkWidth, blkHeight, stride);
-          double blkCost = (double)blkDist + lambda * (double)blkBits;
-          if (blkCost < bestCostSubblk)
-          {
-            *(bestPredsInLevel + subblk) = predMode;
-            *(bestCuttingsInLevel + subblk) = cutMode;
-            bestCostSubblk = blkCost;
-          }
-        }
-      }
-      sumCosts += bestCostSubblk;
+      sumCosts += rd_search_subblk(currOrig, currPred, currResi, currTrafo, currQuant, currReco, blkWidth, blkHeight, stride, bitdepth, quantSize, hasTop, hasLeft, lambda, partDepth, bestPredsInLevel + subblk, bestCutsInLevel + subblk);
     }
     if (sumCosts < bestCost)
     {
       bestCost = sumCosts;
       *bestDepth = partDepth;
       memcpy(bestPreds, bestPredsInLevel, blkNum * sizeof(int));
-      memcpy(bestCuttings, bestCuttingsInLevel, blkNum * sizeof(int));
+      memcpy(bestCuts, bestCutsInLevel, blkNum * sizeof(int));
     }
     free(bestPredsInLevel);
-    free(bestCuttingsInLevel);
+    free(bestCutsInLevel);
   }
 }
 
