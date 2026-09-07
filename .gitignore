@@ -1,5 +1,4 @@
 __pycache__/
 comp_demo/obj/
 *.bin
-comp_demo
-reco_demo
+*.json
