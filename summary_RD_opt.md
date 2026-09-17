@@ -37,14 +37,27 @@ qs &= 2 ^ {\frac{QP - 4}{6}} \\
 \end{align*}
 $$
 
-what gives us $\lambda \propto qs^2$. For this encoder, $\lambda$ is predicted by using the quadratic regression
+what gives us $\lambda \propto qs^2$. Equally, quadratic regression is a good approach in our demo encoder.
+
+For predicting $\lambda$, we only take those $(R, D)$ points into account which form the Pareto frontier. Then let $\lambda = (\lambda_1, \lambda_2, \ldots, \lambda_n)$ and $qs = (qs_1, qs_2, \ldots, qs_n)$ be the generating Lagrange multipliers and quantization step sizes, respectively. Moreover, let $\hat{\lambda}_k(qs_k) = a\cdot qs_k^2 + b\cdot qs_k + c$ be the quadratic model. Since the model should satisfy the constraint $\hat{\lambda}(1)=0$ we eventually get the model equation $$\hat{\lambda}_k = a\cdot (qs_k^2 - 1) + b\cdot (qs_k - 1)$$ The real-valued coefficient vector $c=(a, b)$ is going to be determined by using least squares:
 
 $$
-\lambda = \lambda_{qs} = 
-\begin{cases}
-2(qs - 4)^2 + 28, \quad &qs \geq 4, \\
-28, \quad &qs < 4 \\
-\end{cases}
+\begin{align*}
+&c_{best} = \underset{c}{\operatorname{\argmin}}\left\lVert \lambda - Ac \right\rVert^2, \quad\text{where}\,A=
+\begin{pmatrix}
+qs_1^2 - 1 & qs_1 - 1\\
+qs_2^2 - 1 & qs_2 - 1\\
+\vdots & \vdots\\
+qs_n^2 - 1 & qs_n - 1
+\end{pmatrix}\\
+\iff & (\lambda - Ac_{best}) \perp Ac_{best}\\
+\iff & \langle \lambda - Ac_{best}, Ac_{best} \rangle = 0\\
+\iff & c_{best} = (A^\top A)^{-1}A^\top\lambda
+\end{align*}
+$$
+For our encoder and for the above defined test space, the least squares method yields
+$$
+\hat{\lambda}_k = 0.876 \cdot (qs_k^2 - 1) + 0.23 \cdot (qs_k - 1)
 $$
 
 With this lambda function we sucessfully estimated this encoder's $\lambda$-value and we eventually obtain the coding costs (see second next figure)

@@ -9,8 +9,10 @@
 
 double calcLambda(int stepSize)
 {
-  double lambda = 2 * (stepSize - 4) * (stepSize - 4) + 22;
-  lambda = stepSize < 4 ? 22 : lambda;
+  double a = 0.876165489735865;
+  double b = 0.22992775015755773;
+  double c = -1.106093239893423;
+  double lambda = a * stepSize * stepSize + b * stepSize + c;
   return lambda;
 }
 

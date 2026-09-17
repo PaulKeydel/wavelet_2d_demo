@@ -11,8 +11,8 @@ class RDeval:
         dist    = list()
         bitlen  = list()
         qs      = list()
-        self.range_quant = np.arange(4, 25, 4)
-        self.range_lagr  = np.arange(10, 1000, 40)
+        self.range_quant = np.array([2, 4, 8, 12, 16])
+        self.range_lagr  = np.arange(1, 400, 20)
         for quantSize in self.range_quant:
             for lagrMult in self.range_lagr:
                 os.chdir("comp_demo")
@@ -76,25 +76,27 @@ class RDeval:
 
         return slopes
 
-    def interpolate_lambda(self, vertices: np.ndarray, slopes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        qs_hull     = self.qs[vertices]
-        lambda_hull = -slopes[vertices]
+    def interpolate_lambda(self, slopes: np.ndarray) -> tuple[np.ndarray, np.ndarray, list]:
+        qs_hull     = self.qs[~np.isnan(slopes)]
+        lambda_hull = -slopes[~np.isnan(slopes)]
 
-        z = np.polyfit(qs_hull, lambda_hull, 2)
-        quad_fit = np.poly1d(z)
-        lambdas = np.apply_along_axis(lambda t: quad_fit(t), 0, self.qs)
+        A = np.column_stack((qs_hull ** 2 - 1, qs_hull - 1))
+        c_a, c_b = np.linalg.lstsq(A, lambda_hull, rcond=None)[0]
+
+        quad_fit = lambda qs: c_a * qs * qs + c_b * qs - c_a - c_b
+        lambdas = np.apply_along_axis(quad_fit, 0, self.qs)
 
         costs = self.dist + lambdas * self.bitlen
         minJ = np.array([costs[self.qs == t].min() for t in self.qs])
         costs /= minJ
-        return lambdas, costs
+        return lambdas, costs, [c_a, c_b, -c_a - c_b]
 
 
 if __name__ == "__main__":
     rd = RDeval("astronaut.bin", 512, 512)
     vertices, simplices = rd.get_conv_hull()
     slopes = rd.calc_slopes(vertices)
-    lambdas, costs = rd.interpolate_lambda(vertices, slopes)
+    lambdas, costs, coefs = rd.interpolate_lambda(slopes)
 
     d = {"rate": rd.bitlen, "dist": rd.dist, "qs": rd.qs, "slopes": slopes, "lambdas": -slopes, "lambda_pred": lambdas, "costs": costs}
     df_full = pd.DataFrame(data=d)
@@ -105,5 +107,5 @@ if __name__ == "__main__":
 
     print(df_hull.to_string())
     print()
-    print("Lambda prediction from quantization stepsize:")
-    print(np.poly1d(np.polyfit(df_hull["qs"], df_hull["lambdas"], 2)))
+    print("Lambda prediction: lambda = a * qs^2 + b * qs + c:\n")
+    print("  a = " + str(coefs[0]) + ", b = " + str(coefs[1]) + ", c = " + str(coefs[2]))

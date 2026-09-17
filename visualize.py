@@ -325,7 +325,7 @@ class DemoRD:
         rd = RDeval(binImg, width, height)
         vertices, simplices = rd.get_conv_hull()
         slopes = rd.calc_slopes(vertices)
-        lambdas, costs = rd.interpolate_lambda(vertices, slopes)
+        lambdas, costs, _ = rd.interpolate_lambda(slopes)
 
         for figMode in range(2):
             cats = np.ones(len(rd.points))
@@ -336,22 +336,28 @@ class DemoRD:
             elif figMode == 1:
                 cats = costs
                 title = "Increasing R-D-costs (J = D + λR) orthogonal to the optimal RD-curve"
-            fig = plt.figure(figsize=(10, 6))
+            fig = plt.figure(figsize=(8, 8))
+            plt.gca().set_box_aspect(1)
             plt.scatter(rd.bitlen, rd.dist, c=cats, cmap="viridis_r")
-            plt.xlim(-0.5, None)
+            plt.xlim(-1, 4)
+            plt.ylim(0, 120)
+            axs_ratio = 120 / 5
             for simplex in simplices:
                 plt.plot(rd.points[simplex, 0], rd.points[simplex, 1], "k-")
             for vertex in vertices:
                 if costs[vertex] > 1.0:
                     continue
-                lbl = "P(quantSize: " + str(rd.qs[vertex]) + ", lambda: " + "{:.2f}".format(lambdas[vertex]) + ")"
-                plt.text(rd.points[vertex, 0] - 0.1, rd.points[vertex, 1], lbl, horizontalalignment="right")
+                lbl = "λ = " + "{:.2f}".format(lambdas[vertex]) + " (quant size = " + str(rd.qs[vertex]) + ")"
+                plt.text(rd.points[vertex, 0] - 0.2, rd.points[vertex, 1], lbl, horizontalalignment="right")
                 if figMode == 0:
                     continue
                 p = rd.points[vertex]
-                m_orth = -1 / slopes[vertex]
-                x_tickz = np.array([p[0] - 0.1, p[0] + 0.3])
-                plt.plot(x_tickz, m_orth * (x_tickz - p[0]) + p[1], "g:")
+                #calc slope of the perpendicular by using m_orth / axs_ratio = -1 / (m / axs_ratio)
+                m_orth = -1 / slopes[vertex] * axs_ratio * axs_ratio
+                #determine end points of the perpendicular, we assume m_orth = dy/dx and we want (dx * axs_ratio)^2 + dy^2 = 400
+                x_tickz = [p[0], p[0] + 20 / np.sqrt(axs_ratio ** 2 + m_orth ** 2)]
+                y_tickz = [p[1], p[1] + 20 * m_orth / np.sqrt(axs_ratio ** 2 + m_orth ** 2)]
+                plt.plot(x_tickz, y_tickz, "g:")
             plt.colorbar()
             plt.xlabel("Average number of bits [Bits/Pixel]")
             plt.ylabel("Average squared error [1/Pixel]")
