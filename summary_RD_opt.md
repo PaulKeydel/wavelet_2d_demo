@@ -43,7 +43,7 @@ For predicting $\lambda$, we only take those $(R, D)$ points into account which 
 
 $$
 \begin{align*}
-&c_{best} = \underset{c}{\operatorname{\argmin}}\left\lVert \lambda - Ac \right\rVert^2, \quad\text{where}\,A=
+&c_{best} = \underset{c}{\argmin}\left\lVert \lambda - Ac \right\rVert^2, \quad\text{where}\,A=
 \begin{pmatrix}
 qs_1^2 - 1 & qs_1 - 1\\
 qs_2^2 - 1 & qs_2 - 1\\
