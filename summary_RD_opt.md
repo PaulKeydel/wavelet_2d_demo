@@ -32,7 +32,7 @@ $$
 
  ![test](visuals/demo_RD.svg)
 
-As in other lossy image coder, on the convex hull we typically have points that only depend on the quantization step size. The corresponding best $\lambda$-values are our desired encoder multiplier and we can generelly estimate them by finding a regression model $\lambda = \lambda (qs_{\text{best}})$. For this kind of image coder, it's also common to discover a quadratic relation between ${\lambda}_{\text{best}}$ and $qs_{\text{best}}$. For example, looking at the HEVC and VVC standard, one founds
+As in other lossy image coder, on the convex hull we typically have points that only depend on the quantization step size. The corresponding best $\lambda$-values are our desired encoder multiplier and we can generelly estimate them by finding a regression model $\lambda = \lambda (qs_{\textrm{best}})$. For this kind of image coder, it's also common to discover a quadratic relation between ${\lambda}_{\textrm{best}}$ and $qs_{\textrm{best}}$. For example, looking at the HEVC and VVC standard, one founds
 
 $$
 \begin{align*}
@@ -102,7 +102,7 @@ If we choose $J^* = |u| = \sqrt{m^2+1}$ for the elementary costs, we will get
 
 $$
 \begin{align*}
-J&=J^{*}\cdot\left\lvert P_U\left(\begin{pmatrix}R \\ D\end{pmatrix}\right)\right\rvert \\
+J &=J^{*}\cdot\left\lvert P_U\left(\begin{pmatrix}R \\ D\end{pmatrix}\right)\right\rvert \\
 &=\left\langle \begin{pmatrix}-m \\ 1\end{pmatrix},\begin{pmatrix}R \\ D\end{pmatrix} \right\rangle \\
 &= D-mR \\
 &=D+\lambda R
