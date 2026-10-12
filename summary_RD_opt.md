@@ -18,13 +18,13 @@ However, all compression standards based on rate-distortion-optimization have it
 
 Let's have a closer look at how we estimate the needed $\lambda$-value(s) for our demo encoder. Since we do not know the specific value yet, the basic idea is to a whole range of different $\lambda$ and $qs$ values. More precisely, we run the encoder application for a set of $(\lambda, qs)$ pairs and generate corresponding $(R(\lambda_i, qs_i), D(\lambda_i, qs_i))$ RD points. By taking these RD points and plot them in the R-D plane we can eventually calculate $\lambda$ from all lambda qs pairs which obtain the highest coding efficiency compared to other RD points. But let's go through step by step.
 
-First, we start with the test space that contains the $(\lambda, qs)$ pairs. For this encoder we define a test space with $6\cdot 25 = 150$ pairs as follows:
+First, we start with the test space that contains the $(\lambda, qs)$ pairs. For this encoder we define a test space with $5\cdot 20 = 100$ pairs as follows:
 
 $$
 QS \times \Lambda = \lbrace 2, 4, 8, 12, 16\rbrace \times {\lbrace 1 + 20i\rbrace}_{i=0}^{19}
 $$
 
-Applying the encoder on this test space yields the set of corresponding RD points. This point cloud is plotted in the next figure. There we see that $\lambda$-$qs$ combinations sometimes cause "bad", and sometimes "good" compression results. The bad ones have high bit rates and high distortions (upper right corner), whereas combinations with a good compression gain lie in the bottom left corner (low rates and low squared errors). Since we are interested in the best $\lambda$-values, we look for the $(\lambda, qs)$ pairs with associated $(R, D)$ points on the convex hull, which is plotted as solid line. This line is also called Pareto frontier, it is assumed to be a linear spline interpolation. One can easily see that there is no other coding point minimizing both rate and distortion. The Pareto Front gives us the optimal rate distortion ratio and, hence, is directly connected to the Lagrange multiplier. So, let $D^{PF}=D(R)$ let be the Pareto frontier. Because the cost functional $J$ must satisfy $\partial_R J(R,D)=0$ we get
+Applying the encoder on this test space yields the set of corresponding RD points. This point cloud is plotted in the next figure. There we see that $\lambda$ - $qs$ combinations sometimes cause "bad", and sometimes "good" compression results. The bad ones have high bit rates and high distortions (upper right corner), whereas combinations with a good compression gain lie in the bottom left corner (low rates and low squared errors). Since we are interested in the best $\lambda$-values, we look for the $(\lambda, qs)$ pairs with associated $(R, D)$ points on the convex hull, which is plotted as solid line. This line is also called Pareto frontier, it is assumed to be a linear spline interpolation. One can easily see that there is no other coding point minimizing both rate and distortion. The Pareto Front gives us the optimal rate distortion ratio and, hence, is directly connected to the Lagrange multiplier. So, let $D^{PF}=D(R)$ let be the Pareto frontier. Because the cost functional $J$ must satisfy $\partial_R J(R,D)=0$ we get
 
 $$
 \lambda = -\frac{dD^{PF}}{dR}(R)
@@ -32,7 +32,7 @@ $$
 
  ![test](visuals/demo_RD.svg)
 
-As in other lossy image coder, on the convex hull we typically have points that only depend on the quantization step size. The corresponding best $\lambda$-values are our desired encoder multiplier and we can generelly estimate them by finding a regression model $\lambda = \lambda (qs_\text{best})$. For this kind of image coder, it's also common to discover a quadratic relation between ${\lambda}_\text{best}$ and $qs_\text{best}$. For example, looking at the HEVC and VVC standard, one founds
+As in other lossy image coder, on the convex hull we typically have points that only depend on the quantization step size. The corresponding best $\lambda$-values are our desired encoder multiplier and we can generelly estimate them by finding a regression model $\lambda = \lambda (qs_{\text{best}})$. For this kind of image coder, it's also common to discover a quadratic relation between ${\lambda}_{\text{best}}$ and $qs_{\text{best}}$. For example, looking at the HEVC and VVC standard, one founds
 
 $$
 \begin{align*}
@@ -47,7 +47,7 @@ For predicting $\lambda$, we only take those $(R, D)$ points into account which 
 
 $$
 \begin{align*}
-&c_{best} = \underset{c}{\text{argmin}}\left\lVert \lambda - Ac \right\rVert^2, \quad\text{where} \\, A= %%this is not valid Latex, see https://github.com/orgs/community/discussions/17143
+&c_{best} = \underset{c}{\text{argmin}}\left\lVert \lambda - Ac \right\rVert^2, \quad\text{where} \\, A=
 \begin{pmatrix}
 qs_1^2 - 1 & qs_1 - 1\\
 qs_2^2 - 1 & qs_2 - 1\\
@@ -102,7 +102,7 @@ If we choose $J^* = |u| = \sqrt{m^2+1}$ for the elementary costs, we will get
 
 $$
 \begin{align*}
-J&=J^*\cdot\left\lvert P_U\left(\begin{pmatrix}R \\ D\end{pmatrix}\right)\right\rvert \\
+J&=J^{*}\cdot\left\lvert P_U\left(\begin{pmatrix}R \\ D\end{pmatrix}\right)\right\rvert \\
 &=\left\langle \begin{pmatrix}-m \\ 1\end{pmatrix},\begin{pmatrix}R \\ D\end{pmatrix} \right\rangle \\
 &= D-mR \\
 &=D+\lambda R
