@@ -101,12 +101,12 @@ $$
 If we choose $J^* = |u| = \sqrt{m^2+1}$ for the elementary costs, we will get
 
 $$
-\begin{align*}
+\begin{aligned}
 J &=J^{*}\cdot\left\lvert P_U\left(\begin{pmatrix}R \\ D\end{pmatrix}\right)\right\rvert \\
 &=\left\langle \begin{pmatrix}-m \\ 1\end{pmatrix},\begin{pmatrix}R \\ D\end{pmatrix} \right\rangle \\
 &= D-mR \\
 &=D+\lambda R
-\end{align*}
+\end{aligned}
 $$
 
 with $\lambda = -m$.
