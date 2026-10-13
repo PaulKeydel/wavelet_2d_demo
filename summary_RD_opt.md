@@ -35,10 +35,10 @@ $$
 As in other lossy image coder, on the convex hull we typically have points that only depend on the quantization step size. The corresponding best $\lambda$-values are our desired encoder multiplier and we can generelly estimate them by finding a regression model $\lambda = \lambda (qs_{\textrm{best}})$. For this kind of image coder, it's also common to discover a quadratic relation between $\lambda_{\textrm{best}}$ and $qs_{\textrm{best}}$. For example, looking at the HEVC and VVC standard, one founds
 
 $$
-\begin{align*}
+\begin{aligned}
 qs &= 2 ^ {\frac{QP - 4}{6}} \\
 \lambda &= 2 ^ {\frac{QP - 12}{3}},
-\end{align*}
+\end{aligned}
 $$
 
 what gives us $\lambda \propto qs^2$. Equally, quadratic regression is a good approach in our demo encoder.
@@ -46,7 +46,7 @@ what gives us $\lambda \propto qs^2$. Equally, quadratic regression is a good ap
 For predicting $\lambda$, we only take those $(R, D)$ points into account which form the Pareto frontier. Then let $\lambda = (\lambda_1, \lambda_2, \ldots, \lambda_n)$ and $qs = (qs_1, qs_2, \ldots, qs_n)$ be the generating Lagrange multipliers and quantization step sizes, respectively. Moreover, let $\hat{\lambda}_k(qs_k) = a\cdot qs_k^2 + b\cdot qs_k + c$ be the quadratic model. Since the model should satisfy the constraint $\hat{\lambda}(1)=0$ we eventually get the model equation $$\hat{\lambda}_k = a\cdot (qs_k^2 - 1) + b\cdot (qs_k - 1)$$ The real-valued coefficient vector $c=(a, b)$ is going to be determined by using least squares:
 
 $$
-\begin{align*}
+\begin{aligned}
 &c_{best} = \underset{c}{\text{argmin}}\left\lVert \lambda - Ac \right\rVert^2, \quad\text{where} \\; A=
 \begin{pmatrix}
 qs_1^2 - 1 & qs_1 - 1\\
@@ -57,7 +57,7 @@ qs_n^2 - 1 & qs_n - 1
 \iff & (\lambda - Ac_{best}) \perp Ac_{best}\\
 \iff & \langle \lambda - Ac_{best}, Ac_{best} \rangle = 0\\
 \iff & c_{best} = (A^\top A)^{-1}A^\top\lambda
-\end{align*}
+\end{aligned}
 $$
 
 For our encoder and for the above defined test space, the least squares method yields
@@ -91,11 +91,11 @@ $$
 For the orthogonal projection we set $u=(-m,1)$ which satisfies $(-m,1)\cdot(1,m)^\top=0$. Futhermore, since we have $P_U(x)\in U$, the approach $P_U(x)=\mu u$ yields:
 
 $$
-\begin{align*}
+\begin{aligned}
 &\langle u, x-P_U(x)\rangle = 0 \\
 \iff & \mu = \frac{\langle u, x\rangle}{|u|^2} \\
 \iff & P_U(x) = \frac{\langle u, x\rangle}{|u|^2}u
-\end{align*}
+\end{aligned}
 $$
 
 If we choose $J^* = |u| = \sqrt{m^2+1}$ for the elementary costs, we will get
@@ -103,14 +103,7 @@ If we choose $J^* = |u| = \sqrt{m^2+1}$ for the elementary costs, we will get
 $$
 \begin{aligned}
 J&=J^{*} \cdot \left\lvert P_U\left(\left(R,D\right)\right)\right\rvert \\
-&=\left\langle
-\begin{pmatrix}
--m \\\\ 1
-\end{pmatrix},
-\begin{pmatrix}
-R \\\\ D
-\end{pmatrix}
-\right\rangle \\
+&=\left\langle\begin{pmatrix}-m \\\\ 1\end{pmatrix},\begin{pmatrix}R \\\\ D\end{pmatrix}\right\rangle \\
 &= D-mR \\
 &=D+\lambda R
 \end{aligned}
