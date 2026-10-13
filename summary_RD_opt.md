@@ -47,7 +47,7 @@ For predicting $\lambda$, we only take those $(R, D)$ points into account which 
 
 $$
 \begin{align*}
-&c_{best} = \underset{c}{\text{argmin}}\left\lVert \lambda - Ac \right\rVert^2, \quad\text{where} \\, A=
+&c_{best} = \underset{c}{\text{argmin}}\left\lVert \lambda - Ac \right\rVert^2, \quad\text{where} \\; A=
 \begin{pmatrix}
 qs_1^2 - 1 & qs_1 - 1\\
 qs_2^2 - 1 & qs_2 - 1\\
@@ -102,8 +102,15 @@ If we choose $J^* = |u| = \sqrt{m^2+1}$ for the elementary costs, we will get
 
 $$
 \begin{aligned}
-J &=J^{*}\cdot\left\lvert P_U\left(\begin{pmatrix}R \\ D\end{pmatrix}\right)\right\rvert \\
-&=\left\langle \begin{pmatrix}-m \\ 1\end{pmatrix},\begin{pmatrix}R \\ D\end{pmatrix} \right\rangle \\
+J&=J^{*} \cdot \left\lvert P_U\left(\left(R,D\right)\right)\right\rvert \\
+&=\left\langle
+\begin{pmatrix}
+-m \\ 1
+\end{pmatrix},
+\begin{pmatrix}
+R \\ D
+\end{pmatrix}
+\right\rangle \\
 &= D-mR \\
 &=D+\lambda R
 \end{aligned}
