@@ -105,10 +105,10 @@ $$
 J&=J^{*} \cdot \left\lvert P_U\left(\left(R,D\right)\right)\right\rvert \\
 &=\left\langle
 \begin{pmatrix}
--m \\ 1
+-m \\\\ 1
 \end{pmatrix},
 \begin{pmatrix}
-R \\ D
+R \\\\ D
 \end{pmatrix}
 \right\rangle \\
 &= D-mR \\
